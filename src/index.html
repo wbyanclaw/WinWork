@@ -41,6 +41,10 @@
       z-index: 50;
       box-shadow: -4px 0 12px rgba(0,0,0,0.1);
     }
+    .conv-item.active { background: var(--brandLight); color: var(--brand); }
+    .conv-item.active .text-faint { color: var(--brand); }
+    .conv-item.active i { color: var(--brand) !important; }
+
     #rightPanel.open {
       transform: translateX(0);
     }
@@ -98,7 +102,7 @@
       <span class="font-bold text-[15px] text-ink tracking-tight">WinWork</span>
     </div>
     <div class="h-5 w-px bg-border"></div>
-    <span class="text-muted text-sm">AI Agent · 文件管理</span>
+    <span class="text-muted text-sm">文件管理</span>
     <div class="flex-1"></div>
     <!-- API Status -->
     <div class="flex items-center gap-2 bg-successBg border border-emerald-200 text-success px-3 py-1 rounded-full text-xs font-medium">
@@ -153,18 +157,6 @@
           docs/
         </div>
 
-        <div class="px-3 pb-1 mt-3">
-          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">工具链</span>
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50">
-          <i data-lucide="terminal" class="w-4 h-4 text-brand" style="stroke-width:1.5"></i>
-          <span class="flex-1">wind-cli</span>
-          <span class="text-[10px] text-faint">9</span>
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50">
-          <i data-lucide="monitor" class="w-4 h-4 text-purple-500" style="stroke-width:1.5"></i>
-          WFT Terminal
-        </div>
       </div>
     </aside>
 
@@ -181,7 +173,7 @@
           </div>
           <div>
             <h2 class="text-xl font-bold text-ink tracking-tight mb-2">WinWork</h2>
-            <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，AI Agent 将自动调用 wind-cli 完成文件操作</p>
+            <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，WinWork 将自动调用 wind-cli 完成文件操作</p>
           </div>
           <!-- Scenario chips -->
           <div class="flex flex-wrap gap-2 justify-center mt-1">
@@ -217,105 +209,90 @@
             <i data-lucide="arrow-up" class="w-4 h-4"></i>
           </button>
         </div>
-        <p class="text-[11px] text-faint mt-2 pl-1">AI Agent 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
+        <p class="text-[11px] text-faint mt-2 pl-1">WinWork 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
       </div>
     </main>
 
     <!-- Right: Wiki + Config (collapsible) -->
-    <aside id="rightPanel" class="w-64 bg-white border-l border-border flex flex-col flex-shrink-0 overflow-y-auto">
-
-      <!-- Wiki -->
-      <div class="px-4 py-4 border-b border-border">
-        <div class="flex items-center gap-2 mb-3">
-          <i data-lucide="book-open" class="w-3.5 h-3.5 text-muted"></i>
-          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">知识库</span>
+    <aside id="rightPanel" class="w-72 bg-white border-l border-border flex flex-col overflow-hidden">
+      <!-- Detail header -->
+      <div class="px-5 py-4 border-b border-border">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[12px] font-semibold text-muted uppercase tracking-wide">详情</span>
         </div>
-        <div class="flex flex-col gap-1.5">
-          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-colors text-xs text-muted">
-            <i data-lucide="book" class="w-3.5 h-3.5 text-purple-400 flex-shrink-0"></i>
-            <span class="flex-1 truncate">wind-cli 使用指南</span>
-            <span class="text-[10px] text-purple-400 bg-purple-50 px-1.5 py-0.5 rounded">文档</span>
-          </div>
-          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-brand hover:bg-brandLight cursor-pointer transition-colors text-xs text-muted">
-            <i data-lucide="code-2" class="w-3.5 h-3.5 text-brand flex-shrink-0"></i>
-            <span class="flex-1 truncate">Agent Protocol 规范</span>
-            <span class="text-[10px] text-brand bg-brandLight px-1.5 py-0.5 rounded">API</span>
-          </div>
-          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-emerald-300 hover:bg-emerald-50 cursor-pointer transition-colors text-xs text-muted">
-            <i data-lucide="globe" class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0"></i>
-            <span class="flex-1 truncate">WFT 集成说明</span>
-            <span class="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">集成</span>
-          </div>
-          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-amber-300 hover:bg-amber-50 cursor-pointer transition-colors text-xs text-muted">
-            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0"></i>
-            <span class="flex-1 truncate">安全模型文档</span>
-            <span class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">安全</span>
+        <!-- File info -->
+        <div class="bg-slate-50 rounded-xl border border-border p-3 mb-3">
+          <div class="text-[11px] text-faint mb-1">当前文件</div>
+          <div class="flex items-center gap-2 text-sm text-ink">
+            <i data-lucide="file-text" class="w-4 h-4 text-brand"></i>
+            <span class="font-medium">greeting.txt</span>
+            <span class="text-faint">· 11 bytes · 2026-05-16 00:35</span>
           </div>
         </div>
-      </div>
-
-      <!-- Protocol -->
-      <div class="px-4 py-4 border-b border-border">
-        <div class="flex items-center gap-2 mb-3">
-          <i data-lucide="git-branch" class="w-3.5 h-3.5 text-muted"></i>
-          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">协议链路</span>
-        </div>
-        <div class="bg-slate-50 border border-border rounded-lg p-3">
-          <div class="flex flex-wrap items-center gap-1 text-[11px] mb-1.5">
-            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">用户</span>
-            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
-            <span class="px-1.5 py-0.5 rounded bg-successBg text-success font-medium border border-emerald-100">AI Agent</span>
-            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
-            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">wind CLI</span>
-          </div>
-          <div class="flex flex-wrap items-center gap-1 text-[11px] pl-4">
-            <i data-lucide="arrow-down" class="w-3 h-3 text-faint"></i>
-            <span class="px-1.5 py-0.5 rounded bg-slate-100 text-muted border border-border">工作区</span>
-            <span class="text-faint">·</span>
-            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">windlocal://</span>
-            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
-            <span class="px-1.5 py-0.5 rounded bg-successBg text-success font-medium border border-emerald-100">WFT</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Config -->
-      <div class="px-4 py-4 border-b border-border">
-        <div class="flex items-center gap-2 mb-3">
-          <i data-lucide="settings" class="w-3.5 h-3.5 text-muted"></i>
-          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">API 配置</span>
-        </div>
+        <!-- Full trace -->
+        <div class="text-[11px] font-semibold text-muted mb-2">完整链路</div>
         <div class="space-y-1.5">
-          <div class="flex items-center gap-2 text-xs">
-            <span class="text-faint w-8 text-[11px]">模型</span>
-            <span class="text-brand font-medium">Claude Sonnet 4</span>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="w-5 h-5 rounded bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">1</span>
+            <span class="text-muted">用户发送消息</span>
           </div>
-          <div class="flex items-center gap-2 text-xs">
-            <span class="text-faint w-8 text-[11px]">工具</span>
-            <span class="text-muted">windcli (9 函数)</span>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="w-5 h-5 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-bold">2</span>
+            <span class="text-muted">AI 解析意图 → windcli ls</span>
           </div>
-          <div class="flex items-center gap-2 text-xs">
-            <span class="text-faint w-8 text-[11px]">状态</span>
-            <span class="text-success font-medium flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-success inline-block"></span>
-              已连接
-            </span>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="w-5 h-5 rounded bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center text-[10px] font-bold">3</span>
+            <span class="text-muted">wind-cli 执行 ls workspace/</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="w-5 h-5 rounded bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center text-[10px] font-bold">4</span>
+            <span class="text-muted">返回 JSON 结果</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="w-5 h-5 rounded bg-green-50 border border-green-100 text-green-600 flex items-center justify-center text-[10px] font-bold">5</span>
+            <span class="text-muted">AI 格式化回复用户</span>
           </div>
         </div>
       </div>
-
-      <!-- Install -->
-      <div class="px-4 py-4">
-        <div class="flex items-center gap-2 mb-3">
-          <i data-lucide="download" class="w-3.5 h-3.5 text-muted"></i>
-          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">安装</span>
+      <!-- Command detail -->
+      <div class="flex-1 overflow-y-auto px-5 py-4">
+        <div class="text-[11px] font-semibold text-muted mb-2">执行命令</div>
+        <div class="bg-slate-900 rounded-lg p-3 mb-3">
+          <div class="text-[11px] text-emerald-400 font-mono mb-1">$ windcli ls</div>
+          <div class="text-[11px] text-slate-400 font-mono">wind-demo/</div>
         </div>
-        <div class="flex items-center gap-2 bg-slate-50 border border-border rounded-lg px-3 py-2">
-          <code class="flex-1 text-[11px] text-muted truncate font-mono">irm .../install.ps1 | iex</code>
-          <button onclick="copyCmd(this)" class="text-[11px] text-muted hover:text-brand border border-border rounded px-2 py-0.5 transition-colors bg-white flex-shrink-0">复制</button>
+        <div class="text-[11px] font-semibold text-muted mb-2">返回结果</div>
+        <div class="bg-slate-900 rounded-lg p-3 overflow-x-auto">
+          <pre class="text-[11px] text-slate-300 font-mono whitespace-pre">{
+  "ok": true,
+  "data": {
+    "path": "wind-demo/",
+    "entries": [
+      {"name": "greeting.txt", "kind": "file"},
+      {"name": "hello.txt", "kind": "file"},
+      {"name": "notes/", "kind": "dir"}
+    ]
+  }
+}</pre>
+        </div>
+        <div class="mt-4">
+          <div class="text-[11px] font-semibold text-muted mb-2">安全溯源</div>
+          <div class="bg-slate-50 rounded-lg border border-border p-3 space-y-1.5">
+            <div class="flex items-center gap-2 text-[11px]">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
+              <span class="text-muted">路径隔离：所有操作限制在 workspace/ 内</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px]">
+              <i data-lucide="scan" class="w-3.5 h-3.5 text-blue-500"></i>
+              <span class="text-muted">无路径穿越（../）风险</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px]">
+              <i data-lucide="lock" class="w-3.5 h-3.5 text-purple-500"></i>
+              <span class="text-muted">无外部命令执行</span>
+            </div>
+          </div>
         </div>
       </div>
-
     </aside>
   </div>
 
@@ -429,7 +406,7 @@
             <i data-lucide="bot" class="w-3.5 h-3.5 text-brand" style="stroke-width:2"></i>
           </div>
           <div class="flex-1 flex flex-col gap-1">
-            <span class="text-[10px] text-faint px-1">AI Agent</span>
+            <span class="text-[10px] text-faint px-1">WinWork</span>
             <div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble">
               ${escape(s.reply)}
               <div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5">
@@ -473,6 +450,14 @@
       }, 2000);
     }
 
+    function selectConv(el) {
+      document.querySelectorAll(".conv-item").forEach(i => i.classList.remove("active"));
+      el.classList.add("active");
+    }
+    function newChat() {
+      document.getElementById("messages").innerHTML = document.getElementById("welcomeScreen")?.outerHTML || "";
+      document.getElementById("input")?.focus();
+    }
     function copyCmd(btn) {
       navigator.clipboard.writeText('irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex').then(() => {
         btn.textContent = '已复制';
