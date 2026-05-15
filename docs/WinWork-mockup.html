@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinWork</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#1d4ed8',
+            brandLight: '#eff6ff',
+            brandMid: '#dbeafe',
+            ink: '#0f172a',
+            muted: '#64748b',
+            faint: '#94a3b8',
+            border: '#e2e8f0',
+            success: '#059669',
+            successBg: '#ecfdf5',
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide icons via unpkg -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
+
+    /* Right sidebar slide */
+    #rightPanel {
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 50;
+      box-shadow: -4px 0 12px rgba(0,0,0,0.1);
+    }
+    #rightPanel.open {
+      transform: translateX(0);
+    }
+
+  /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .animate-fade-up { animation: fadeUp 0.3s ease-out forwards; }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+    /* Thinking dots */
+    .thinking-dots span {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: #94a3b8;
+      display: inline-block;
+      animation: bounce 1.2s infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: .15s; }
+    .thinking-dots span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
+
+    /* Smooth textarea */
+    textarea { resize: none; }
+    textarea:focus { outline: none; }
+
+    /* Tool card highlight */
+    .tool-cmd { font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; }
+
+    /* Active tree item */
+    .tree-item:hover { background: #f8fafc; }
+    .tree-item.active { background: #eff6ff; color: #1d4ed8; }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+
+  <!-- ── Header ── -->
+  <header class="h-14 bg-white border-b border-border flex items-center px-6 gap-4 flex-shrink-0 shadow-sm">
+    <!-- Logo -->
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 bg-ink rounded-lg flex items-center justify-center">
+        <i data-lucide="folder-open" class="w-4 h-4 text-white" style="stroke-width:2"></i>
+      </div>
+      <span class="font-bold text-[15px] text-ink tracking-tight">WinWork</span>
+    </div>
+    <div class="h-5 w-px bg-border"></div>
+    <span class="text-muted text-sm">AI Agent · 文件管理</span>
+    <div class="flex-1"></div>
+    <!-- API Status -->
+    <div class="flex items-center gap-2 bg-successBg border border-emerald-200 text-success px-3 py-1 rounded-full text-xs font-medium">
+      <span class="w-1.5 h-1.5 rounded-full bg-success pulse-dot"></span>
+      Claude API 已连接
+    </div>
+    <span class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.1</span>
+    <!-- Detail toggle -->
+    <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
+      <i data-lucide="panel-right" class="w-3.5 h-3.5"></i>
+      查看详情
+    </button>
+  </header>
+
+  <!-- ── Main ── -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- Left: File Tree -->
+    <aside class="w-52 bg-white border-r border-border flex flex-col flex-shrink-0">
+      <div class="px-4 py-3 border-b border-border">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
+          <span class="text-[10px] text-faint bg-slate-100 px-1.5 py-0.5 rounded-full border border-border">4 项</span>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto py-2">
+
+        <div class="px-3 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span>
+        </div>
+
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2">
+          <i data-lucide="folder" class="w-4 h-4 text-amber-500" style="stroke-width:1.5"></i>
+          workspace/
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
+          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
+          <span class="flex-1 truncate">greeting.txt</span>
+          <span class="text-[10px] text-faint">11B</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
+          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
+          <span class="flex-1 truncate">hello.txt</span>
+          <span class="text-[10px] text-faint">11B</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2 hover:bg-slate-50">
+          <i data-lucide="folder" class="w-4 h-4 text-amber-400" style="stroke-width:1.5"></i>
+          notes/
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2 hover:bg-slate-50">
+          <i data-lucide="folder" class="w-4 h-4 text-amber-400" style="stroke-width:1.5"></i>
+          docs/
+        </div>
+
+        <div class="px-3 pb-1 mt-3">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">工具链</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50">
+          <i data-lucide="terminal" class="w-4 h-4 text-brand" style="stroke-width:1.5"></i>
+          <span class="flex-1">wind-cli</span>
+          <span class="text-[10px] text-faint">9</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50">
+          <i data-lucide="monitor" class="w-4 h-4 text-purple-500" style="stroke-width:1.5"></i>
+          WFT Terminal
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: Chat -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
+
+      <!-- Messages area -->
+      <div id="messages" class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
+
+        <!-- Welcome -->
+        <div id="welcomeScreen" class="flex-1 flex flex-col items-center justify-center gap-5 text-center">
+          <div class="w-14 h-14 bg-ink rounded-2xl flex items-center justify-center shadow-md">
+            <i data-lucide="folder-open" class="w-7 h-7 text-white" style="stroke-width:1.5"></i>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-ink tracking-tight mb-2">WinWork</h2>
+            <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，AI Agent 将自动调用 wind-cli 完成文件操作</p>
+          </div>
+          <!-- Scenario chips -->
+          <div class="flex flex-wrap gap-2 justify-center mt-1">
+            <button onclick="run('ls')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <i data-lucide="list" class="w-3.5 h-3.5"></i> 列出文件
+            </button>
+            <button onclick="run('mkdir')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i> 新建目录
+            </button>
+            <button onclick="run('write')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <i data-lucide="pen-line" class="w-3.5 h-3.5"></i> 写入文件
+            </button>
+            <button onclick="run('wft')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i> WFT 打开
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Input -->
+      <div class="px-8 py-4 bg-white border-t border-border flex-shrink-0">
+        <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
+          <textarea
+            id="input"
+            rows="1"
+            placeholder="用自然语言描述您的需求..."
+            onkeydown="handleKey(event)"
+            oninput="resize(this)"
+            class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"
+          ></textarea>
+          <button onclick="send()" class="w-8 h-8 bg-brand rounded-lg text-white flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors shadow-sm">
+            <i data-lucide="arrow-up" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <p class="text-[11px] text-faint mt-2 pl-1">AI Agent 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
+      </div>
+    </main>
+
+    <!-- Right: Wiki + Config (collapsible) -->
+    <aside id="rightPanel" class="w-64 bg-white border-l border-border flex flex-col flex-shrink-0 overflow-y-auto">
+
+      <!-- Wiki -->
+      <div class="px-4 py-4 border-b border-border">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="book-open" class="w-3.5 h-3.5 text-muted"></i>
+          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">知识库</span>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-colors text-xs text-muted">
+            <i data-lucide="book" class="w-3.5 h-3.5 text-purple-400 flex-shrink-0"></i>
+            <span class="flex-1 truncate">wind-cli 使用指南</span>
+            <span class="text-[10px] text-purple-400 bg-purple-50 px-1.5 py-0.5 rounded">文档</span>
+          </div>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-brand hover:bg-brandLight cursor-pointer transition-colors text-xs text-muted">
+            <i data-lucide="code-2" class="w-3.5 h-3.5 text-brand flex-shrink-0"></i>
+            <span class="flex-1 truncate">Agent Protocol 规范</span>
+            <span class="text-[10px] text-brand bg-brandLight px-1.5 py-0.5 rounded">API</span>
+          </div>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-emerald-300 hover:bg-emerald-50 cursor-pointer transition-colors text-xs text-muted">
+            <i data-lucide="globe" class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0"></i>
+            <span class="flex-1 truncate">WFT 集成说明</span>
+            <span class="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">集成</span>
+          </div>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-border bg-slate-50 hover:border-amber-300 hover:bg-amber-50 cursor-pointer transition-colors text-xs text-muted">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0"></i>
+            <span class="flex-1 truncate">安全模型文档</span>
+            <span class="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">安全</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Protocol -->
+      <div class="px-4 py-4 border-b border-border">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="git-branch" class="w-3.5 h-3.5 text-muted"></i>
+          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">协议链路</span>
+        </div>
+        <div class="bg-slate-50 border border-border rounded-lg p-3">
+          <div class="flex flex-wrap items-center gap-1 text-[11px] mb-1.5">
+            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">用户</span>
+            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
+            <span class="px-1.5 py-0.5 rounded bg-successBg text-success font-medium border border-emerald-100">AI Agent</span>
+            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
+            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">wind CLI</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1 text-[11px] pl-4">
+            <i data-lucide="arrow-down" class="w-3 h-3 text-faint"></i>
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 text-muted border border-border">工作区</span>
+            <span class="text-faint">·</span>
+            <span class="px-1.5 py-0.5 rounded bg-brandLight text-brand font-medium border border-blue-100">windlocal://</span>
+            <i data-lucide="arrow-right" class="w-3 h-3 text-faint"></i>
+            <span class="px-1.5 py-0.5 rounded bg-successBg text-success font-medium border border-emerald-100">WFT</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div class="px-4 py-4 border-b border-border">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="settings" class="w-3.5 h-3.5 text-muted"></i>
+          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">API 配置</span>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-faint w-8 text-[11px]">模型</span>
+            <span class="text-brand font-medium">Claude Sonnet 4</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-faint w-8 text-[11px]">工具</span>
+            <span class="text-muted">windcli (9 函数)</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="text-faint w-8 text-[11px]">状态</span>
+            <span class="text-success font-medium flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-success inline-block"></span>
+              已连接
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Install -->
+      <div class="px-4 py-4">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="download" class="w-3.5 h-3.5 text-muted"></i>
+          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">安装</span>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-50 border border-border rounded-lg px-3 py-2">
+          <code class="flex-1 text-[11px] text-muted truncate font-mono">irm .../install.ps1 | iex</code>
+          <button onclick="copyCmd(this)" class="text-[11px] text-muted hover:text-brand border border-border rounded px-2 py-0.5 transition-colors bg-white flex-shrink-0">复制</button>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // ── Data ─────────────────────────────────────────────────
+    const scenarios = {
+      ls: {
+        nl: '列出工作区中的所有文件',
+        reply: '好的，我来列出工作区中的文件。',
+        cmd: 'windcli ls',
+        result: { ok: true, data: { path: '/tmp/WinWork-001/', entries: [{ name: 'greeting.txt', kind: 'file', size: 11 }, { name: 'hello.txt', kind: 'file', size: 11 }, { name: 'notes', kind: 'dir' }, { name: 'docs', kind: 'dir' }] } },
+        final: '工作区文件列表：\n\n• greeting.txt — 文件 (11 字节)\n• hello.txt — 文件 (11 字节)\n• notes/ — 目录\n• docs/ — 目录\n\n所有操作在工作区内安全隔离。'
+      },
+      mkdir: {
+        nl: '帮我创建一个 notes 目录',
+        reply: '好的，正在创建 notes 目录。',
+        cmd: 'windcli mkdir notes',
+        result: { ok: true, data: { path: 'notes/', created: true } },
+        final: '已成功创建 notes/ 目录！\n\n工作区当前文件：\n• greeting.txt\n• hello.txt\n• notes/'
+      },
+      write: {
+        nl: '写一个 hello.txt 文件，内容是 Hello wind!',
+        reply: '好的，正在写入 hello.txt。',
+        cmd: 'echo "Hello wind!" | windcli put hello.txt --stdin --overwrite',
+        result: { ok: true, data: { path: 'hello.txt', bytes: 11, written_at: '2026-05-16T00:51:00Z' } },
+        final: '已成功创建 hello.txt，内容为 "Hello wind!" (11 字节)。'
+      },
+      wft: {
+        nl: '在 WFT 终端中打开 greeting.txt',
+        reply: '正在通过 windlocal 协议发送到 WFT 终端。',
+        cmd: 'windcli wft file greeting.txt',
+        result: { ok: true, data: { uri: 'windlocal://page?kind=file&target=greeting.txt', action: 'open_in_wft', description: '在 WFT 金融终端中打开 greeting.txt' } },
+        final: '已在 WFT 终端中打开 greeting.txt。\n\nwindlocal:// 协议完成跨应用文件派发，WFT 终端接收到指令并展示文件内容。'
+      }
+    };
+
+    // ── Helpers ─────────────────────────────────────────────
+    function highlight(el) {
+      document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function resize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 96) + 'px';
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    }
+
+    function escape(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    }
+
+    function highlightJSON(obj) {
+      const s = JSON.stringify(obj, null, 2);
+      return s
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"([^"]+)":/g, '<span style="color:#1d4ed8">"$1"</span>:')
+        .replace(/: "([^"]+)"/g, ': <span style="color:#059669">"$1"</span>')
+        .replace(/: (true|false)/g, ': <span style="color:#d97706">$1</span>')
+        .replace(/: (\d+)/g, ': <span style="color:#7c3aed">$1</span>');
+    }
+
+    // ── Run scenario ────────────────────────────────────────
+    function run(key) {
+      document.getElementById('input').value = scenarios[key].nl;
+      resize(document.getElementById('input'));
+      send(key);
+    }
+
+    // ── Send ─────────────────────────────────────────────────
+    function send(forcedKey) {
+      const inp = document.getElementById('input');
+      let text = inp.value.trim();
+      const msgs = document.getElementById('messages');
+      document.getElementById('welcomeScreen')?.remove();
+
+      let key = forcedKey || 'ls';
+      if (!forcedKey) {
+        const t = text.toLowerCase();
+        if (t.includes('列出')||t.includes('list')||t.includes('文件')) key='ls';
+        else if (t.includes('创建')||t.includes('mkdir')||t.includes('目录')) key='mkdir';
+        else if (t.includes('写')||t.includes('write')||t.includes('hello')) key='write';
+        else if (t.includes('wft')||t.includes('打开')||t.includes('open')) key='wft';
+      }
+      const s = scenarios[key];
+      const displayText = forcedKey ? s.nl : text;
+
+      // Human message
+      msgs.innerHTML += `
+        <div class="msg user animate-fade-up flex gap-2.5 max-w-2xl ml-auto">
+          <div class="flex-1 flex flex-col items-end gap-1">
+            <span class="text-[10px] text-faint px-1">你</span>
+            <div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escape(displayText)}</div>
+          </div>
+          <div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5">
+            <i data-lucide="user" class="w-3.5 h-3.5 text-white" style="stroke-width:2"></i>
+          </div>
+        </div>`;
+
+      // Agent thinking
+      const aid = 'm' + Date.now();
+      msgs.innerHTML += `
+        <div id="${aid}" class="msg agent animate-fade-up flex gap-2.5 max-w-2xl">
+          <div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5">
+            <i data-lucide="bot" class="w-3.5 h-3.5 text-brand" style="stroke-width:2"></i>
+          </div>
+          <div class="flex-1 flex flex-col gap-1">
+            <span class="text-[10px] text-faint px-1">AI Agent</span>
+            <div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble">
+              ${escape(s.reply)}
+              <div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5">
+                <div class="thinking-dots"><span></span><span></span><span></span></div>
+                正在调用 wind-cli 工具...
+              </div>
+            </div>
+          </div>
+        </div>`;
+      lucide.createIcons();
+
+      if (!forcedKey) inp.value = '';
+      resize(inp);
+      msgs.scrollTop = msgs.scrollHeight;
+
+      // Tool result
+      setTimeout(() => {
+        const el = document.getElementById(aid + '-bubble');
+        if (!el) return;
+        el.innerHTML = `${escape(s.reply)}
+          <div class="mt-3 rounded-lg border border-border overflow-hidden">
+            <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
+              <i data-lucide="zap" class="w-3 h-3 text-brand" style="stroke-width:2"></i>
+              <span class="text-[11px] text-muted font-medium">windcli — ${escape(s.cmd.split(' ')[1] || s.cmd)}</span>
+            </div>
+            <div class="px-3 py-2.5">
+              <div class="flex items-center gap-1.5 mb-2">
+                <span class="text-[10px] bg-successBg text-success border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">✓ 执行成功</span>
+              </div>
+              <div class="tool-cmd bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2">$ ${escape(s.cmd)}</div>
+              <pre class="text-[11px] text-muted leading-relaxed overflow-x-auto">${highlightJSON(s.result)}</pre>
+            </div>
+          </div>`;
+        msgs.scrollTop = msgs.scrollHeight;
+      }, 900);
+
+      // Final response
+      setTimeout(() => {
+        const el = document.getElementById(aid + '-bubble');
+        if (el) { el.innerHTML = escape(s.final); msgs.scrollTop = msgs.scrollHeight; }
+      }, 2000);
+    }
+
+    function copyCmd(btn) {
+      navigator.clipboard.writeText('irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex').then(() => {
+        btn.textContent = '已复制';
+        setTimeout(() => btn.textContent = '复制', 1500);
+      });
+    }
+
+    function toggleDetail() {
+      const panel = document.getElementById('rightPanel');
+      const btn = document.getElementById('detailBtn');
+      if (!panel) return;
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        btn.innerHTML = '<i data-lucide="panel-right-close" class="w-3.5 h-3.5"></i>收起详情';
+        btn.style.color = 'var(--brand)';
+        btn.style.borderColor = 'var(--brand)';
+      } else {
+        btn.innerHTML = '<i data-lucide="panel-right" class="w-3.5 h-3.5"></i>查看详情';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      }
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
