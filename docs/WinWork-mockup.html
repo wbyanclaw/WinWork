@@ -123,7 +123,7 @@
       <div class="px-4 py-3 border-b border-border">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
-          <span class="text-[10px] text-faint bg-slate-100 px-1.5 py-0.5 rounded-full border border-border">4 项</span>
+          <span class="text-[10px] text-faint bg-slate-100 px-1.5 py-0.5 rounded-full border border-border">7 项</span>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto py-2">
@@ -153,6 +153,33 @@
         <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2 hover:bg-slate-50">
           <i data-lucide="folder" class="w-4 h-4 text-amber-400" style="stroke-width:1.5"></i>
           docs/
+        </div>
+
+        <!-- Divider -->
+        <div class="mx-4 my-2 border-t border-border"></div>
+
+        <div class="px-3 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span>
+        </div>
+
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2">
+          <i data-lucide="book-open" class="w-4 h-4 text-brand" style="stroke-width:1.5"></i>
+          wiki/
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
+          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
+          <span class="flex-1 truncate">Q1摘要.md</span>
+          <span class="text-[10px] text-faint">AI</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
+          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
+          <span class="flex-1 truncate">WFT集成.md</span>
+          <span class="text-[10px] text-faint">AI</span>
+        </div>
+        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
+          <i data-lucide="file-cog" class="w-4 h-4 text-purple-400" style="stroke-width:1.5"></i>
+          <span class="flex-1 truncate">SYSTEM.md</span>
+          <span class="text-[10px] text-faint">配置</span>
         </div>
 
       </div>
