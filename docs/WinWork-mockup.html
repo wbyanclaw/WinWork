@@ -119,7 +119,7 @@
   <div class="flex-1 flex overflow-hidden relative">
 
     <!-- Left: File Tree -->
-    <aside class="w-52 bg-white border-r border-border flex flex-col flex-shrink-0">
+    <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
       <div class="px-4 py-3 border-b border-border">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
@@ -211,85 +211,178 @@
       </div>
     </main>
 
-    <!-- Right: Wiki + Config (collapsible) -->
-    <aside id="rightPanel" class="w-72 bg-white border-l border-border flex flex-col overflow-hidden">
-      <!-- Detail header -->
-      <div class="px-5 py-4 border-b border-border">
+    <!-- Right: Detail Panel (GPT-style large slide-out, 420px) -->
+    <aside id="rightPanel" class="w-[420px] bg-white border-l border-border flex flex-col overflow-hidden">
+      <!-- Header -->
+      <div class="px-5 py-3.5 border-b border-border flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
           <span class="text-[12px] font-semibold text-muted uppercase tracking-wide">详情</span>
+          <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
         </div>
-        <!-- File info -->
-        <div class="bg-slate-50 rounded-xl border border-border p-3 mb-3">
-          <div class="text-[11px] text-faint mb-1">当前文件</div>
-          <div class="flex items-center gap-2 text-sm text-ink">
-            <i data-lucide="file-text" class="w-4 h-4 text-brand"></i>
-            <span class="font-medium">greeting.txt</span>
-            <span class="text-faint">· 11 bytes · 2026-05-16 00:35</span>
-          </div>
-        </div>
-        <!-- Full trace -->
-        <div class="text-[11px] font-semibold text-muted mb-2">完整链路</div>
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">1</span>
-            <span class="text-muted">用户发送消息</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-bold">2</span>
-            <span class="text-muted">AI 解析意图 → windcli ls</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center text-[10px] font-bold">3</span>
-            <span class="text-muted">wind-cli 执行 ls workspace/</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center text-[10px] font-bold">4</span>
-            <span class="text-muted">返回 JSON 结果</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-green-50 border border-green-100 text-green-600 flex items-center justify-center text-[10px] font-bold">5</span>
-            <span class="text-muted">AI 格式化回复用户</span>
-          </div>
+        <!-- Tabs -->
+        <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+          <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium text-muted transition-all" id="tab-file">文件内容</button>
+          <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium text-brand bg-white shadow-sm transition-all" id="tab-trace">执行链路</button>
+          <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium text-muted transition-all" id="tab-source">数据溯源</button>
         </div>
       </div>
-      <!-- Command detail -->
+
+      <!-- Panel content (scrollable) -->
       <div class="flex-1 overflow-y-auto px-5 py-4">
-        <div class="text-[11px] font-semibold text-muted mb-2">执行命令</div>
-        <div class="bg-slate-900 rounded-lg p-3 mb-3">
-          <div class="text-[11px] text-emerald-400 font-mono mb-1">$ windcli ls</div>
-          <div class="text-[11px] text-slate-400 font-mono">wind-demo/</div>
+
+        <!-- Tab: 文件内容 -->
+        <div id="panel-file" class="detail-content hidden">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="file-text" class="w-4 h-4 text-brand"></i>
+            <span class="text-sm font-semibold text-ink">greeting.txt</span>
+            <span class="text-[11px] text-faint">11 bytes</span>
+          </div>
+          <div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">Hello wind!</div>
+          <div class="mt-3 flex gap-2">
+            <button class="flex-1 py-1.5 text-[11px] text-muted border border-border rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors">
+              <i data-lucide="copy" class="w-3 h-3"></i>复制内容
+            </button>
+            <button class="flex-1 py-1.5 text-[11px] text-muted border border-border rounded-lg hover:bg-slate-50 flex items-center justify-center gap-1.5 transition-colors">
+              <i data-lucide="external-link" class="w-3 h-3"></i>WFT 打开
+            </button>
+          </div>
         </div>
-        <div class="text-[11px] font-semibold text-muted mb-2">返回结果</div>
-        <div class="bg-slate-900 rounded-lg p-3 overflow-x-auto">
-          <pre class="text-[11px] text-slate-300 font-mono whitespace-pre">{
+
+        <!-- Tab: 执行链路 -->
+        <div id="panel-trace" class="detail-content">
+          <div class="space-y-0">
+            <!-- Step 1: User input -->
+            <div class="flex gap-3 mb-4">
+              <div class="flex flex-col items-center">
+                <div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div>
+                <div class="flex-1 w-px bg-border mt-1"></div>
+              </div>
+              <div class="pb-3 flex-1">
+                <div class="text-[11px] text-faint mb-0.5">步骤 1 · 用户输入</div>
+                <div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-[12px] text-slate-700 leading-relaxed">"列出工作区中的所有文件"</div>
+              </div>
+            </div>
+            <!-- Step 2: AI parsing -->
+            <div class="flex gap-3 mb-4">
+              <div class="flex flex-col items-center">
+                <div class="w-6 h-6 rounded-full bg-emerald-100 border-2 border-emerald-300 text-emerald-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">2</div>
+                <div class="flex-1 w-px bg-border mt-1"></div>
+              </div>
+              <div class="pb-3 flex-1">
+                <div class="text-[11px] text-faint mb-0.5">步骤 2 · AI 解析意图</div>
+                <div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">
+                  识别为文件列表请求 → 构造 <span class="text-brand font-mono">windcli ls</span> 命令
+                </div>
+              </div>
+            </div>
+            <!-- Step 3: CLI execution -->
+            <div class="flex gap-3 mb-4">
+              <div class="flex flex-col items-center">
+                <div class="w-6 h-6 rounded-full bg-amber-100 border-2 border-amber-300 text-amber-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">3</div>
+                <div class="flex-1 w-px bg-border mt-1"></div>
+              </div>
+              <div class="pb-3 flex-1">
+                <div class="text-[11px] text-faint mb-0.5">步骤 3 · wind-cli 执行</div>
+                <div class="bg-slate-900 rounded-lg px-3 py-2 text-[11px] text-emerald-400 font-mono">$ windcli ls</div>
+                <div class="bg-white border border-border rounded-lg px-3 py-2 text-[11px] text-muted mt-1.5">
+                  工作目录: /home/ubuntu/.local/share/wind/workspace/<br>
+                  路径隔离: ✓ 限制在 workspace/ 内
+                </div>
+              </div>
+            </div>
+            <!-- Step 4: Result -->
+            <div class="flex gap-3 mb-4">
+              <div class="flex flex-col items-center">
+                <div class="w-6 h-6 rounded-full bg-purple-100 border-2 border-purple-300 text-purple-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">4</div>
+                <div class="flex-1 w-px bg-border mt-1"></div>
+              </div>
+              <div class="pb-3 flex-1">
+                <div class="text-[11px] text-faint mb-0.5">步骤 4 · 返回结果</div>
+                <div class="bg-slate-900 rounded-lg px-3 py-2 overflow-x-auto">
+                  <pre class="text-[11px] text-slate-300 font-mono whitespace-pre">{
   "ok": true,
   "data": {
-    "path": "wind-demo/",
     "entries": [
-      {"name": "greeting.txt", "kind": "file"},
-      {"name": "hello.txt", "kind": "file"},
-      {"name": "notes/", "kind": "dir"}
+      {"name":"greeting.txt","kind":"file","size":11},
+      {"name":"hello.txt","kind":"file","size":11},
+      {"name":"notes/","kind":"dir"},
+      {"name":"docs/","kind":"dir"}
     ]
   }
 }</pre>
-        </div>
-        <div class="mt-4">
-          <div class="text-[11px] font-semibold text-muted mb-2">安全溯源</div>
-          <div class="bg-slate-50 rounded-lg border border-border p-3 space-y-1.5">
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
-              <span class="text-muted">路径隔离：所有操作限制在 workspace/ 内</span>
+                </div>
+              </div>
             </div>
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="scan" class="w-3.5 h-3.5 text-blue-500"></i>
-              <span class="text-muted">无路径穿越（../）风险</span>
-            </div>
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="lock" class="w-3.5 h-3.5 text-purple-500"></i>
-              <span class="text-muted">无外部命令执行</span>
+            <!-- Step 5: AI response -->
+            <div class="flex gap-3">
+              <div class="flex flex-col items-center">
+                <div class="w-6 h-6 rounded-full bg-green-100 border-2 border-green-300 text-green-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">5</div>
+              </div>
+              <div class="flex-1">
+                <div class="text-[11px] text-faint mb-0.5">步骤 5 · AI 格式化回复</div>
+                <div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">
+                  AI 根据 JSON 结果格式化输出：文件列表 + 元信息
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Tab: 数据溯源 -->
+        <div id="panel-source" class="detail-content hidden">
+          <div class="text-[11px] font-semibold text-muted mb-3 uppercase tracking-wide">原始数据溯源</div>
+          <div class="space-y-3">
+            <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+              <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
+                <i data-lucide="arrow-down-to-line" class="w-3.5 h-3.5 text-brand"></i>
+                <span class="text-[11px] font-semibold text-muted">输入数据</span>
+              </div>
+              <div class="p-3">
+                <div class="text-[10px] text-faint mb-1">用户输入（原始）</div>
+                <div class="font-mono text-[12px] text-slate-700">"列出工作区中的所有文件"</div>
+              </div>
+            </div>
+            <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+              <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
+                <i data-lucide="terminal" class="w-3.5 h-3.5 text-brand"></i>
+                <span class="text-[11px] font-semibold text-muted">工具调用</span>
+              </div>
+              <div class="p-3">
+                <div class="text-[10px] text-faint mb-1">wind-cli 命令</div>
+                <div class="font-mono text-[12px] text-slate-700 mb-2">windcli ls</div>
+                <div class="text-[10px] text-faint mb-1">执行上下文</div>
+                <div class="font-mono text-[11px] text-slate-500">cwd: ~/.local/share/wind/workspace/<br>env: WIND_HOME=~/.local/share/wind</div>
+              </div>
+            </div>
+            <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+              <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
+                <i data-lucide="arrow-up-from-line" class="w-3.5 h-3.5 text-emerald-500"></i>
+                <span class="text-[11px] font-semibold text-muted">输出数据</span>
+              </div>
+              <div class="p-3">
+                <div class="text-[10px] text-faint mb-1">wind-cli 返回（原始 JSON）</div>
+                <div class="font-mono text-[11px] text-slate-700 whitespace-pre">{"ok":true,"data":{"entries":[...]}}</div>
+              </div>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+              <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>安全校验通过
+              </div>
+              <div class="text-[11px] text-emerald-600 flex items-center gap-1.5">
+                <i data-lucide="check-circle" class="w-3 h-3"></i>路径隔离：workspace/ 外不可访问
+              </div>
+              <div class="text-[11px] text-emerald-600 flex items-center gap-1.5">
+                <i data-lucide="check-circle" class="w-3 h-3"></i>无路径穿越（../）风险
+              </div>
+              <div class="text-[11px] text-emerald-600 flex items-center gap-1.5">
+                <i data-lucide="check-circle" class="w-3 h-3"></i>无外部命令注入
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </aside>
   </div>
@@ -478,6 +571,24 @@
         btn.style.borderColor = '';
       }
       lucide.createIcons();
+    }
+
+    function switchTab(name, btn) {
+      // Hide all panels
+      document.querySelectorAll('.detail-content').forEach(p => p.classList.add('hidden'));
+      // Deactivate all tabs
+      document.querySelectorAll('.detail-tab').forEach(t => {
+        t.classList.remove('active', 'text-brand', 'bg-white', 'shadow-sm');
+        t.classList.add('text-muted');
+      });
+      // Show selected panel
+      const panel = document.getElementById('panel-' + name);
+      if (panel) panel.classList.remove('hidden');
+      // Activate selected tab
+      if (btn) {
+        btn.classList.add('active', 'text-brand', 'bg-white', 'shadow-sm');
+        btn.classList.remove('text-muted');
+      }
     }
   </script>
 </body>
