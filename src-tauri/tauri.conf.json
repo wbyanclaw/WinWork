@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "WinWork — AI Agent · 文件管理演示",
+        "title": "WinWork",
         "width": 1200,
         "height": 760,
         "minWidth": 900,

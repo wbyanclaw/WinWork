@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WinWork</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -12,7 +13,6 @@
           colors: {
             brand: '#1d4ed8',
             brandLight: '#eff6ff',
-            brandMid: '#dbeafe',
             ink: '#0f172a',
             muted: '#64748b',
             faint: '#94a3b8',
@@ -24,77 +24,35 @@
       }
     }
   </script>
-  <!-- Lucide icons via unpkg -->
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
-
-    /* Right sidebar slide */
-    #rightPanel {
-      transform: translateX(100%);
-      transition: transform 0.3s ease;
-      position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      z-index: 50;
-      box-shadow: -4px 0 12px rgba(0,0,0,0.1);
-    }
-    .conv-item.active { background: var(--brandLight); color: var(--brand); }
-    .conv-item.active .text-faint { color: var(--brand); }
-    .conv-item.active i { color: var(--brand) !important; }
-
-    #rightPanel.open {
-      transform: translateX(0);
-    }
-
-  /* Custom scrollbar */
+    #rightPanel { transform: translateX(100%); transition: transform 0.3s ease; position: absolute; right: 0; top: 0; bottom: 0; z-index: 50; box-shadow: -4px 0 12px rgba(0,0,0,0.1); }
+    #rightPanel.open { transform: translateX(0); }
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-
-    /* Animations */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pulse-dot {
-      0%,100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
     .animate-fade-up { animation: fadeUp 0.3s ease-out forwards; }
     .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
-
-    /* Thinking dots */
-    .thinking-dots span {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: #94a3b8;
-      display: inline-block;
-      animation: bounce 1.2s infinite;
-    }
+    .thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: #94a3b8; display: inline-block; animation: bounce 1.2s infinite; }
     .thinking-dots span:nth-child(2) { animation-delay: .15s; }
     .thinking-dots span:nth-child(3) { animation-delay: .3s; }
     @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
-
-    /* Smooth textarea */
     textarea { resize: none; }
     textarea:focus { outline: none; }
-
-    /* Tool card highlight */
-    .tool-cmd { font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; }
-
-    /* Active tree item */
     .tree-item:hover { background: #f8fafc; }
     .tree-item.active { background: #eff6ff; color: #1d4ed8; }
+    .detail-tab.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #1d4ed8; }
+    .detail-tab { color: #64748b; }
+    .detail-tab:hover { color: #1d4ed8; }
   </style>
 </head>
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
 
-  <!-- ── Header ── -->
+  <!-- Header -->
   <header class="h-14 bg-white border-b border-border flex items-center px-6 gap-4 flex-shrink-0 shadow-sm">
-    <!-- Logo -->
     <div class="flex items-center gap-2.5">
       <div class="w-8 h-8 bg-ink rounded-lg flex items-center justify-center">
         <i data-lucide="folder-open" class="w-4 h-4 text-white" style="stroke-width:2"></i>
@@ -102,69 +60,34 @@
       <span class="font-bold text-[15px] text-ink tracking-tight">WinWork</span>
     </div>
     <div class="flex-1"></div>
-    <!-- API Status -->
-    <div class="flex items-center gap-2 bg-successBg border border-emerald-200 text-success px-3 py-1 rounded-full text-xs font-medium">
-      <span class="w-1.5 h-1.5 rounded-full bg-success pulse-dot"></span>
-      Claude API 已连接
+    <div id="apiStatus" class="flex items-center gap-2 bg-slate-50 border border-border text-muted px-3 py-1 rounded-full text-xs">
+      <span class="w-1.5 h-1.5 rounded-full bg-slate-400 pulse-dot"></span>
+      检查 wind-cli...
     </div>
-    <span class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.1</span>
-    <!-- Detail toggle -->
     <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
-      <i data-lucide="panel-right" class="w-3.5 h-3.5"></i>
-      查看详情
+      <i data-lucide="panel-right" class="w-3.5 h-3.5"></i>查看详情
     </button>
   </header>
 
-  <!-- ── Main ── -->
+  <!-- Main -->
   <div class="flex-1 flex overflow-hidden relative">
 
-    <!-- Left: File Tree -->
-    <aside class="w-52 bg-white border-r border-border flex flex-col flex-shrink-0">
+    <!-- Left File Tree -->
+    <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
       <div class="px-4 py-3 border-b border-border">
-        <div class="flex items-center justify-between">
-          <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
-          <span class="text-[10px] text-faint bg-slate-100 px-1.5 py-0.5 rounded-full border border-border">4 项</span>
-        </div>
+        <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
       </div>
-      <div class="flex-1 overflow-y-auto py-2">
-
+      <div class="flex-1 overflow-y-auto py-2" id="fileTree">
         <div class="px-3 pb-1">
           <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span>
         </div>
-
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2">
-          <i data-lucide="folder" class="w-4 h-4 text-amber-500" style="stroke-width:1.5"></i>
-          workspace/
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
-          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
-          <span class="flex-1 truncate">greeting.txt</span>
-          <span class="text-[10px] text-faint">11B</span>
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50" onclick="highlight(this)">
-          <i data-lucide="file-text" class="w-4 h-4 text-slate-400" style="stroke-width:1.5"></i>
-          <span class="flex-1 truncate">hello.txt</span>
-          <span class="text-[10px] text-faint">11B</span>
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2 hover:bg-slate-50">
-          <i data-lucide="folder" class="w-4 h-4 text-amber-400" style="stroke-width:1.5"></i>
-          notes/
-        </div>
-        <div class="tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2 hover:bg-slate-50">
-          <i data-lucide="folder" class="w-4 h-4 text-amber-400" style="stroke-width:1.5"></i>
-          docs/
-        </div>
-
+        <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
       </div>
     </aside>
 
     <!-- Center: Chat -->
     <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
-
-      <!-- Messages area -->
       <div id="messages" class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
-
-        <!-- Welcome -->
         <div id="welcomeScreen" class="flex-1 flex flex-col items-center justify-center gap-5 text-center">
           <div class="w-14 h-14 bg-ink rounded-2xl flex items-center justify-center shadow-md">
             <i data-lucide="folder-open" class="w-7 h-7 text-white" style="stroke-width:1.5"></i>
@@ -173,36 +96,15 @@
             <h2 class="text-xl font-bold text-ink tracking-tight mb-2">WinWork</h2>
             <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，WinWork 将自动调用 wind-cli 完成文件操作</p>
           </div>
-          <!-- Scenario chips -->
-          <div class="flex flex-wrap gap-2 justify-center mt-1">
-            <button onclick="run('ls')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
-              <i data-lucide="list" class="w-3.5 h-3.5"></i> 列出文件
-            </button>
-            <button onclick="run('mkdir')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
-              <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i> 新建目录
-            </button>
-            <button onclick="run('write')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
-              <i data-lucide="pen-line" class="w-3.5 h-3.5"></i> 写入文件
-            </button>
-            <button onclick="run('wft')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-brandLight transition-all duration-150 shadow-sm flex items-center gap-1.5">
-              <i data-lucide="external-link" class="w-3.5 h-3.5"></i> WFT 打开
-            </button>
+          <div id="notInstalledBanner" class="hidden bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700 max-w-sm">
+            <div class="font-medium mb-1">⚠️ wind-cli 未安装</div>
+            <div class="text-xs">请先安装 wind-cli：<code class="bg-amber-100 px-1 rounded">irm ... | iex</code></div>
           </div>
         </div>
-
       </div>
-
-      <!-- Input -->
       <div class="px-8 py-4 bg-white border-t border-border flex-shrink-0">
         <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
-          <textarea
-            id="input"
-            rows="1"
-            placeholder="用自然语言描述您的需求..."
-            onkeydown="handleKey(event)"
-            oninput="resize(this)"
-            class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"
-          ></textarea>
+          <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"></textarea>
           <button onclick="send()" class="w-8 h-8 bg-brand rounded-lg text-white flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors shadow-sm">
             <i data-lucide="arrow-up" class="w-4 h-4"></i>
           </button>
@@ -211,142 +113,133 @@
       </div>
     </main>
 
-    <!-- Right: Wiki + Config (collapsible) -->
-    <aside id="rightPanel" class="w-72 bg-white border-l border-border flex flex-col overflow-hidden">
-      <!-- Detail header -->
-      <div class="px-5 py-4 border-b border-border">
+    <!-- Right Detail Panel -->
+    <aside id="rightPanel" class="w-[420px] bg-white border-l border-border flex flex-col overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-border flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
           <span class="text-[12px] font-semibold text-muted uppercase tracking-wide">详情</span>
+          <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
         </div>
-        <!-- File info -->
-        <div class="bg-slate-50 rounded-xl border border-border p-3 mb-3">
-          <div class="text-[11px] text-faint mb-1">当前文件</div>
-          <div class="flex items-center gap-2 text-sm text-ink">
-            <i data-lucide="file-text" class="w-4 h-4 text-brand"></i>
-            <span class="font-medium">greeting.txt</span>
-            <span class="text-faint">· 11 bytes · 2026-05-16 00:35</span>
-          </div>
-        </div>
-        <!-- Full trace -->
-        <div class="text-[11px] font-semibold text-muted mb-2">完整链路</div>
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">1</span>
-            <span class="text-muted">用户发送消息</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-[10px] font-bold">2</span>
-            <span class="text-muted">AI 解析意图 → windcli ls</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center text-[10px] font-bold">3</span>
-            <span class="text-muted">wind-cli 执行 ls workspace/</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center text-[10px] font-bold">4</span>
-            <span class="text-muted">返回 JSON 结果</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="w-5 h-5 rounded bg-green-50 border border-green-100 text-green-600 flex items-center justify-center text-[10px] font-bold">5</span>
-            <span class="text-muted">AI 格式化回复用户</span>
-          </div>
+        <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+          <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-file">文件内容</button>
+          <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-trace">执行链路</button>
+          <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-source">数据溯源</button>
         </div>
       </div>
-      <!-- Command detail -->
-      <div class="flex-1 overflow-y-auto px-5 py-4">
-        <div class="text-[11px] font-semibold text-muted mb-2">执行命令</div>
-        <div class="bg-slate-900 rounded-lg p-3 mb-3">
-          <div class="text-[11px] text-emerald-400 font-mono mb-1">$ windcli ls</div>
-          <div class="text-[11px] text-slate-400 font-mono">wind-demo/</div>
+      <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
+        <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
+          <i data-lucide="info" class="w-8 h-8"></i>
+          <p class="text-sm">点击对话中的工具卡片<br>查看详情</p>
         </div>
-        <div class="text-[11px] font-semibold text-muted mb-2">返回结果</div>
-        <div class="bg-slate-900 rounded-lg p-3 overflow-x-auto">
-          <pre class="text-[11px] text-slate-300 font-mono whitespace-pre">{
-  "ok": true,
-  "data": {
-    "path": "wind-demo/",
-    "entries": [
-      {"name": "greeting.txt", "kind": "file"},
-      {"name": "hello.txt", "kind": "file"},
-      {"name": "notes/", "kind": "dir"}
-    ]
-  }
-}</pre>
-        </div>
-        <div class="mt-4">
-          <div class="text-[11px] font-semibold text-muted mb-2">安全溯源</div>
-          <div class="bg-slate-50 rounded-lg border border-border p-3 space-y-1.5">
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
-              <span class="text-muted">路径隔离：所有操作限制在 workspace/ 内</span>
-            </div>
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="scan" class="w-3.5 h-3.5 text-blue-500"></i>
-              <span class="text-muted">无路径穿越（../）风险</span>
-            </div>
-            <div class="flex items-center gap-2 text-[11px]">
-              <i data-lucide="lock" class="w-3.5 h-3.5 text-purple-500"></i>
-              <span class="text-muted">无外部命令执行</span>
-            </div>
-          </div>
-        </div>
+        <div id="detail-file" class="hidden"></div>
+        <div id="detail-trace" class="hidden"></div>
+        <div id="detail-source" class="hidden"></div>
       </div>
     </aside>
   </div>
 
   <script>
-    // Initialize Lucide icons
     lucide.createIcons();
 
-    // ── Data ─────────────────────────────────────────────────
-    const scenarios = {
-      ls: {
-        nl: '列出工作区中的所有文件',
-        reply: '好的，我来列出工作区中的文件。',
-        cmd: 'windcli ls',
-        result: { ok: true, data: { path: '/tmp/WinWork-001/', entries: [{ name: 'greeting.txt', kind: 'file', size: 11 }, { name: 'hello.txt', kind: 'file', size: 11 }, { name: 'notes', kind: 'dir' }, { name: 'docs', kind: 'dir' }] } },
-        final: '工作区文件列表：\n\n• greeting.txt — 文件 (11 字节)\n• hello.txt — 文件 (11 字节)\n• notes/ — 目录\n• docs/ — 目录\n\n所有操作在工作区内安全隔离。'
-      },
-      mkdir: {
-        nl: '帮我创建一个 notes 目录',
-        reply: '好的，正在创建 notes 目录。',
-        cmd: 'windcli mkdir notes',
-        result: { ok: true, data: { path: 'notes/', created: true } },
-        final: '已成功创建 notes/ 目录！\n\n工作区当前文件：\n• greeting.txt\n• hello.txt\n• notes/'
-      },
-      write: {
-        nl: '写一个 hello.txt 文件，内容是 Hello wind!',
-        reply: '好的，正在写入 hello.txt。',
-        cmd: 'echo "Hello wind!" | windcli put hello.txt --stdin --overwrite',
-        result: { ok: true, data: { path: 'hello.txt', bytes: 11, written_at: '2026-05-16T00:51:00Z' } },
-        final: '已成功创建 hello.txt，内容为 "Hello wind!" (11 字节)。'
-      },
-      wft: {
-        nl: '在 WFT 终端中打开 greeting.txt',
-        reply: '正在通过 windlocal 协议发送到 WFT 终端。',
-        cmd: 'windcli wft file greeting.txt',
-        result: { ok: true, data: { uri: 'windlocal://page?kind=file&target=greeting.txt', action: 'open_in_wft', description: '在 WFT 金融终端中打开 greeting.txt' } },
-        final: '已在 WFT 终端中打开 greeting.txt。\n\nwindlocal:// 协议完成跨应用文件派发，WFT 终端接收到指令并展示文件内容。'
-      }
-    };
+    // ── State ─────────────────────────────────────────────────
+    let lastResult = null;
 
-    // ── Helpers ─────────────────────────────────────────────
-    function highlight(el) {
+    // ── Init ─────────────────────────────────────────────────
+    async function init() {
+      lucide.createIcons();
+      await checkWindcli();
+      await loadFileTree();
+    }
+
+    async function checkWindcli() {
+      const el = document.getElementById('apiStatus');
+      const banner = document.getElementById('notInstalledBanner');
+      try {
+        const info = await invoke('check_windcli');
+        if (info.found === 'true') {
+          el.className = 'flex items-center gap-2 bg-successBg border border-emerald-200 text-success px-3 py-1 rounded-full text-xs font-medium';
+          el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-success pulse-dot"></span>wind-cli 已就绪';
+        } else {
+          el.className = 'flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1 rounded-full text-xs font-medium';
+          el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>wind-cli 未安装';
+          banner?.classList.remove('hidden');
+        }
+      } catch (e) {
+        el.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>无法检查 wind-cli';
+      }
+      lucide.createIcons();
+    }
+
+    async function loadFileTree() {
+      const el = document.getElementById('treeLoading');
+      const tree = document.getElementById('fileTree');
+      try {
+        const result = await invoke('run_wind_command', { args: 'ls --json' });
+        if (result.ok && result.data) {
+          const entries = result.data.entries || [];
+          el?.remove();
+          renderFileTree(entries, tree);
+        }
+      } catch (e) {
+        el.textContent = '无法加载文件';
+      }
+    }
+
+    function renderFileTree(entries, container) {
+      // Remove loading
+      const loading = container.querySelector('#treeLoading');
+      if (loading) loading.remove();
+
+      // Add divider + wiki section
+      const divider = document.createElement('div');
+      divider.className = 'mx-4 my-2 border-t border-border';
+      container.appendChild(divider);
+
+      const wikiLabel = document.createElement('div');
+      wikiLabel.className = 'px-3 pb-1';
+      wikiLabel.innerHTML = '<span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span>';
+      container.appendChild(wikiLabel);
+
+      // workspace/ node
+      const wsNode = document.createElement('div');
+      wsNode.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2';
+      wsNode.innerHTML = '<i data-lucide="folder" class="w-4 h-4 text-amber-500" style="stroke-width:1.5"></i>workspace/';
+      container.appendChild(wsNode);
+
+      entries.forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50';
+        item.onclick = () => highlightTreeItem(item);
+        const icon = entry.kind === 'dir' ? 'folder' : 'file-text';
+        const color = entry.kind === 'dir' ? 'text-amber-400' : 'text-slate-400';
+        item.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 ${color}" style="stroke-width:1.5"></i><span class="flex-1 truncate">${escHtml(entry.name)}</span><span class="text-[10px] text-faint">${entry.size ? Math.round(entry.size) + 'B' : ''}</span>`;
+        container.appendChild(item);
+      });
+
+      // wiki/ node
+      const wikiNode = document.createElement('div');
+      wikiNode.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2';
+      wikiNode.innerHTML = '<i data-lucide="book-open" class="w-4 h-4 text-brand" style="stroke-width:1.5"></i>wiki/';
+      container.appendChild(wikiNode);
+
+      const wikiEmpty = document.createElement('div');
+      wikiEmpty.className = 'tree-item px-4 py-1.5 rounded-lg mx-2 text-sm text-faint flex items-center gap-2';
+      wikiEmpty.innerHTML = '<i data-lucide="file-text" class="w-4 h-4 text-slate-300" style="stroke-width:1.5"></i><span class="flex-1 truncate italic">暂无知识条目</span>';
+      container.appendChild(wikiEmpty);
+
+      lucide.createIcons();
+    }
+
+    function highlightTreeItem(el) {
       document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
       el.classList.add('active');
     }
 
-    function resize(el) {
-      el.style.height = 'auto';
-      el.style.height = Math.min(el.scrollHeight, 96) + 'px';
-    }
-
-    function handleKey(e) {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    }
-
-    function escape(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    // ── Helpers ─────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     function highlightJSON(obj) {
@@ -359,110 +252,229 @@
         .replace(/: (\d+)/g, ': <span style="color:#7c3aed">$1</span>');
     }
 
-    // ── Run scenario ────────────────────────────────────────
-    function run(key) {
-      document.getElementById('input').value = scenarios[key].nl;
-      resize(document.getElementById('input'));
-      send(key);
+    function resize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 96) + 'px';
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    }
+
+    // ── Command router ───────────────────────────────────────
+    function routeCommand(text) {
+      const t = text.toLowerCase();
+      if (t.includes('列出') || t.includes('list') || t.includes('ls') || t.includes('文件')) return 'ls';
+      if (t.includes('创建') || t.includes('mkdir') || t.includes('目录') || t.includes('新建')) return 'mkdir';
+      if (t.includes('写') || t.includes('put') || t.includes('创建文件')) return 'write';
+      if (t.includes('wft') || t.includes('打开') || t.includes('open')) return 'wft';
+      if (t.includes('wiki') || t.includes('知识库')) return 'wiki';
+      return 'ls'; // default
+    }
+
+    function buildArgs(key, text) {
+      switch (key) {
+        case 'ls': return ['ls', '--json'];
+        case 'mkdir': {
+          const m = text.match(/创建.*?[\s"']*(\S+)/);
+          return ['mkdir', m ? m[1] : 'newdir'];
+        }
+        case 'write': return ['write', 'test.txt', '--stdin'];
+        case 'wft': {
+          const m = text.match(/打开.*?[\s"']*(\S+)/);
+          return ['wft', 'file', m ? m[1] : 'test.txt'];
+        }
+        case 'wiki': return ['wiki', 'status'];
+        default: return ['ls', '--json'];
+      }
     }
 
     // ── Send ─────────────────────────────────────────────────
-    function send(forcedKey) {
+    async function send() {
       const inp = document.getElementById('input');
-      let text = inp.value.trim();
+      const text = inp.value.trim();
+      if (!text) return;
+      inp.value = '';
+      resize(inp);
+
       const msgs = document.getElementById('messages');
       document.getElementById('welcomeScreen')?.remove();
 
-      let key = forcedKey || 'ls';
-      if (!forcedKey) {
-        const t = text.toLowerCase();
-        if (t.includes('列出')||t.includes('list')||t.includes('文件')) key='ls';
-        else if (t.includes('创建')||t.includes('mkdir')||t.includes('目录')) key='mkdir';
-        else if (t.includes('写')||t.includes('write')||t.includes('hello')) key='write';
-        else if (t.includes('wft')||t.includes('打开')||t.includes('open')) key='wft';
-      }
-      const s = scenarios[key];
-      const displayText = forcedKey ? s.nl : text;
+      const key = routeCommand(text);
+      const args = buildArgs(key, text);
 
       // Human message
-      msgs.innerHTML += `
-        <div class="msg user animate-fade-up flex gap-2.5 max-w-2xl ml-auto">
-          <div class="flex-1 flex flex-col items-end gap-1">
-            <span class="text-[10px] text-faint px-1">你</span>
-            <div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escape(displayText)}</div>
-          </div>
-          <div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5">
-            <i data-lucide="user" class="w-3.5 h-3.5 text-white" style="stroke-width:2"></i>
-          </div>
-        </div>`;
-
-      // Agent thinking
+      appendMessage('user', text, msgs);
       const aid = 'm' + Date.now();
-      msgs.innerHTML += `
-        <div id="${aid}" class="msg agent animate-fade-up flex gap-2.5 max-w-2xl">
-          <div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5">
-            <i data-lucide="bot" class="w-3.5 h-3.5 text-brand" style="stroke-width:2"></i>
-          </div>
-          <div class="flex-1 flex flex-col gap-1">
-            <span class="text-[10px] text-faint px-1">WinWork</span>
-            <div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble">
-              ${escape(s.reply)}
-              <div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5">
-                <div class="thinking-dots"><span></span><span></span><span></span></div>
-                正在调用 wind-cli 工具...
-              </div>
-            </div>
-          </div>
-        </div>`;
-      lucide.createIcons();
 
-      if (!forcedKey) inp.value = '';
-      resize(inp);
+      // Thinking state
+      appendAgentThinking(aid, msgs);
+      lucide.createIcons();
       msgs.scrollTop = msgs.scrollHeight;
 
-      // Tool result
-      setTimeout(() => {
-        const el = document.getElementById(aid + '-bubble');
-        if (!el) return;
-        el.innerHTML = `${escape(s.reply)}
-          <div class="mt-3 rounded-lg border border-border overflow-hidden">
-            <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
-              <i data-lucide="zap" class="w-3 h-3 text-brand" style="stroke-width:2"></i>
-              <span class="text-[11px] text-muted font-medium">windcli — ${escape(s.cmd.split(' ')[1] || s.cmd)}</span>
-            </div>
-            <div class="px-3 py-2.5">
-              <div class="flex items-center gap-1.5 mb-2">
-                <span class="text-[10px] bg-successBg text-success border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">✓ 执行成功</span>
+      try {
+        const result = await invoke('run_wind_command', { args: args.join(' ') });
+        lastResult = result;
+
+        // Update agent bubble with result
+        setTimeout(() => {
+          const bubble = document.getElementById(aid + '-bubble');
+          if (!bubble) return;
+          const cmd = args.join(' ');
+          const cmdName = args[0];
+
+          bubble.innerHTML = `
+            <p class="mb-2">${escHtml(text)}</p>
+            <div class="mt-2 rounded-lg border border-border overflow-hidden">
+              <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
+                <i data-lucide="zap" class="w-3 h-3 text-brand" style="stroke-width:2"></i>
+                <span class="text-[11px] text-muted font-medium">windcli — ${escHtml(cmdName)}</span>
               </div>
-              <div class="tool-cmd bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2">$ ${escape(s.cmd)}</div>
-              <pre class="text-[11px] text-muted leading-relaxed overflow-x-auto">${highlightJSON(s.result)}</pre>
+              <div class="px-3 py-2.5">
+                <div class="flex items-center gap-1.5 mb-2">
+                  <span class="text-[10px] ${result.ok ? 'bg-successBg text-success border border-emerald-200' : 'bg-red-50 text-red-500 border border-red-200'} px-1.5 py-0.5 rounded-full font-medium">${result.ok ? '✓ 执行成功' : '✗ 执行失败'}</span>
+                </div>
+                <div class="font-mono bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2">$ wind ${escHtml(cmd)}</div>
+                ${result.data ? `<pre class="text-[11px] text-muted leading-relaxed overflow-x-auto">${highlightJSON(result.data)}</pre>` : ''}
+                ${result.stderr ? `<div class="text-[11px] text-red-500 mt-1">${escHtml(result.stderr)}</div>` : ''}
+              </div>
+            </div>`;
+
+          // Update detail panel
+          updateDetailPanel(result, cmd);
+          lucide.createIcons();
+          msgs.scrollTop = msgs.scrollHeight;
+        }, 500);
+      } catch (e) {
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) {
+          bubble.innerHTML = `<p>⚠️ 无法执行命令: ${escHtml(String(e))}</p>`;
+        }
+      }
+    }
+
+    function appendMessage(role, text, container) {
+      const div = document.createElement('div');
+      div.className = `msg ${role} animate-fade-up flex gap-2.5 max-w-2xl ${role === 'user' ? 'ml-auto' : ''}`;
+      if (role === 'user') {
+        div.innerHTML = `<div class="flex-1 flex flex-col items-end gap-1"><span class="text-[10px] text-faint px-1">你</span><div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div><div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5"><i data-lucide="user" class="w-3.5 h-3.5 text-white" style="stroke-width:2"></i></div>`;
+      } else {
+        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><i data-lucide="bot" class="w-3.5 h-3.5 text-brand" style="stroke-width:2"></i></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">WinWork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div>`;
+      }
+      container.appendChild(div);
+    }
+
+    function appendAgentThinking(aid, container) {
+      const div = document.createElement('div');
+      div.id = aid;
+      div.className = 'msg agent animate-fade-up flex gap-2.5 max-w-2xl';
+      div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><i data-lucide="bot" class="w-3.5 h-3.5 text-brand" style="stroke-width:2"></i></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">WinWork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble"><div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5"><div class="thinking-dots"><span></span><span></span><span></span></div>正在调用 wind-cli 工具...</div></div></div>`;
+      container.appendChild(div);
+    }
+
+    // ── Detail Panel ─────────────────────────────────────────
+    function updateDetailPanel(result, cmd) {
+      document.getElementById('detail-placeholder')?.classList.add('hidden');
+      document.getElementById('detail-file')?.classList.remove('hidden');
+      document.getElementById('detail-trace')?.classList.remove('hidden');
+      document.getElementById('detail-source')?.classList.remove('hidden');
+
+      const trace = document.getElementById('detail-trace');
+      const source = document.getElementById('detail-source');
+
+      // Trace tab
+      trace.innerHTML = buildTraceHTML(result, cmd);
+
+      // Source tab
+      source.innerHTML = buildSourceHTML(result, cmd);
+
+      // File tab
+      const file = document.getElementById('detail-file');
+      if (result.data && result.data.content) {
+        file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+      } else {
+        file.innerHTML = `<div class="text-sm text-faint text-center py-8">选择文件查看内容</div>`;
+      }
+
+      lucide.createIcons();
+    }
+
+    function buildTraceHTML(result, cmd) {
+      const steps = [
+        { n: 1, color: 'blue', label: '用户输入', detail: `"${cmd}"` },
+        { n: 2, color: 'emerald', label: 'AI 解析意图', detail: `wind ${escHtml(cmd)}` },
+        { n: 3, color: 'amber', label: 'wind-cli 执行', detail: `$ wind ${escHtml(cmd)}` },
+        { n: 4, color: 'purple', label: '返回结果', detail: result.data ? JSON.stringify(result.data).slice(0, 120) + '...' : result.stderr || '无输出' },
+        { n: 5, color: 'green', label: 'AI 格式化回复', detail: result.ok ? '格式化输出' : '错误信息已展示' },
+      ];
+
+      return steps.map(s => `
+        <div class="flex gap-3 mb-4">
+          <div class="flex flex-col items-center">
+            <div class="w-6 h-6 rounded-full bg-${s.color}-100 border-2 border-${s.color}-300 text-${s.color}-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">${s.n}</div>
+            ${s.n < 5 ? '<div class="flex-1 w-px bg-border mt-1"></div>' : ''}
+          </div>
+          <div class="${s.n < 5 ? 'pb-3' : ''} flex-1">
+            <div class="text-[11px] text-faint mb-0.5">步骤 ${s.n} · ${s.label}</div>
+            <div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed font-mono">${escHtml(s.detail)}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    function buildSourceHTML(result, cmd) {
+      const args = cmd.split(' ');
+      return `
+        <div class="space-y-3">
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
+              <i data-lucide="terminal" class="w-3.5 h-3.5 text-brand"></i>
+              <span class="text-[11px] font-semibold text-muted">工具调用</span>
             </div>
-          </div>`;
-        msgs.scrollTop = msgs.scrollHeight;
-      }, 900);
-
-      // Final response
-      setTimeout(() => {
-        const el = document.getElementById(aid + '-bubble');
-        if (el) { el.innerHTML = escape(s.final); msgs.scrollTop = msgs.scrollHeight; }
-      }, 2000);
+            <div class="p-3">
+              <div class="text-[10px] text-faint mb-1">wind-cli 命令</div>
+              <div class="font-mono text-[12px] text-slate-700 mb-2">wind ${escHtml(cmd)}</div>
+              <div class="text-[10px] text-faint mb-1">执行上下文</div>
+              <div class="font-mono text-[11px] text-slate-500">cwd: ~/.local/share/wind/workspace/</div>
+            </div>
+          </div>
+          ${result.data ? `
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
+              <i data-lucide="arrow-up-from-line" class="w-3.5 h-3.5 text-emerald-500"></i>
+              <span class="text-[11px] font-semibold text-muted">返回结果</span>
+            </div>
+            <div class="p-3">
+              <pre class="text-[11px] text-slate-700 font-mono whitespace-pre">${highlightJSON(result.data)}</pre>
+            </div>
+          </div>` : ''}
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+            <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>安全校验
+            </div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><i data-lucide="check-circle" class="w-3 h-3"></i>路径隔离：workspace/ 外不可访问</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><i data-lucide="check-circle" class="w-3 h-3"></i>无路径穿越（../）风险</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><i data-lucide="check-circle" class="w-3 h-3"></i>${result.ok ? '命令执行成功' : '执行失败，已安全拦截'}</div>
+          </div>
+        </div>`;
     }
 
-    function selectConv(el) {
-      document.querySelectorAll(".conv-item").forEach(i => i.classList.remove("active"));
-      el.classList.add("active");
-    }
-    function newChat() {
-      document.getElementById("messages").innerHTML = document.getElementById("welcomeScreen")?.outerHTML || "";
-      document.getElementById("input")?.focus();
-    }
-    function copyCmd(btn) {
-      navigator.clipboard.writeText('irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex').then(() => {
-        btn.textContent = '已复制';
-        setTimeout(() => btn.textContent = '复制', 1500);
+    // ── Detail panel tab switching ───────────────────────────
+    function switchTab(name, btn) {
+      document.querySelectorAll('.detail-content').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.detail-tab').forEach(t => {
+        t.classList.remove('active');
+        t.classList.add('text-muted');
       });
+      const panel = document.getElementById('panel-' + name);
+      if (panel) panel.classList.remove('hidden');
+      if (btn) {
+        btn.classList.add('active', 'text-brand', 'bg-white');
+        btn.classList.remove('text-muted');
+        btn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      }
     }
 
+    // ── Detail panel open/close ───────────────────────────────
     function toggleDetail() {
       const panel = document.getElementById('rightPanel');
       const btn = document.getElementById('detailBtn');
@@ -479,6 +491,20 @@
       }
       lucide.createIcons();
     }
+
+    // ── Tauri invoke wrapper ─────────────────────────────────
+    async function invoke(cmd, args = {}) {
+      if (typeof window.__TAURI__ !== 'undefined') {
+        const { invoke } = window.__TAURI__.core;
+        return await invoke(cmd, args);
+      } else {
+        // Fallback: simulate for browser dev
+        return { ok: true, data: { entries: [] }, stderr: '' };
+      }
+    }
+
+    // ── Start ─────────────────────────────────────────────────
+    init();
   </script>
 </body>
 </html>

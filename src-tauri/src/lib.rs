@@ -194,6 +194,40 @@ fn check_windcli() -> HashMap<String, String> {
     result
 }
 
+/// Get wiki status via `wind wiki status`
+#[tauri::command]
+fn wiki_status() -> WindResult {
+    run_wind(&["wiki", "status"])
+}
+
+/// Get wiki lint results via `wind wiki lint`
+#[tauri::command]
+fn wiki_lint() -> WindResult {
+    run_wind(&["wiki", "lint"])
+}
+
+/// Read a file from workspace via `wind read <path>`
+#[tauri::command]
+fn read_file(path: String) -> WindResult {
+    run_wind(&["read", &path])
+}
+
+/// Get the wiki directory path
+#[tauri::command]
+fn get_wiki_dir() -> String {
+    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "wind-cli", "wind") {
+        proj_dirs.data_dir().join("wiki").to_string_lossy().to_string()
+    } else {
+        "~/.local/share/wind/wiki".to_string()
+    }
+}
+
+/// List wiki directory via `wind wiki status`
+#[tauri::command]
+fn list_wiki() -> WindResult {
+    run_wind(&["wiki", "status"])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -207,6 +241,11 @@ pub fn run() {
             init_demo_workspace,
             list_workspace,
             check_windcli,
+            wiki_status,
+            wiki_lint,
+            read_file,
+            get_wiki_dir,
+            list_wiki,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
