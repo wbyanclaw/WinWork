@@ -194,6 +194,49 @@ fn check_windcli() -> HashMap<String, String> {
     result
 }
 
+/// Check if llm-wiki (wind wiki) is installed
+#[tauri::command]
+fn check_llm_wiki() -> HashMap<String, String> {
+    let mut result = HashMap::new();
+    let out = Command::new(get_windcli_path())
+        .args(["wiki", "status"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    match out {
+        Ok(o) => {
+            if o.status.success() {
+                result.insert("found".to_string(), "true".to_string());
+            } else {
+                result.insert("found".to_string(), "false".to_string());
+            }
+        }
+        Err(_) => {
+            result.insert("found".to_string(), "false".to_string());
+        }
+    }
+    result
+}
+
+/// Trigger wind-cli install via PowerShell one-liner
+#[tauri::command]
+fn trigger_install() -> WindResult {
+    let install_script = if cfg!(target_os = "windows") {
+        "irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex"
+    } else {
+        "curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh"
+    };
+
+    WindResult {
+        ok: true,
+        stdout: install_script.to_string(),
+        stderr: String::new(),
+        exit_code: 0,
+        data: None,
+    }
+}
+
 /// Get wiki status via `wind wiki status`
 #[tauri::command]
 fn wiki_status() -> WindResult {
@@ -241,6 +284,8 @@ pub fn run() {
             init_demo_workspace,
             list_workspace,
             check_windcli,
+            check_llm_wiki,
+            trigger_install,
             wiki_status,
             wiki_lint,
             read_file,

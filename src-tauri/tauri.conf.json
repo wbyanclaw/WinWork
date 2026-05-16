@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "WinWork",
-  "version": "0.1.0",
-  "identifier": "com.windcli.demo",
+  "version": "0.1.1",
+  "identifier": "com.windcli.winwork",
   "build": {
     "frontendDist": "../src"
   },
@@ -11,6 +11,8 @@
     "windows": [
       {
         "title": "WinWork",
+        "decorations": false,
+        "transparent": false,
         "width": 1200,
         "height": 760,
         "minWidth": 900,
@@ -33,6 +35,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "digestAlgorithm": "sha256"
+    }
   }
 }
