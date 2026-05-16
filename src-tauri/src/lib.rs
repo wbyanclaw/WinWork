@@ -291,23 +291,20 @@ async fn trigger_install() -> WindResult {
         let app_data = std::env::var("LOCALAPPDATA")
             .or_else(|_| std::env::var("APPDATA"))
             .unwrap_or_else(|_| ".".to_string());
-        let install_dir = format!("{}\\winwork\\wind-cli", app_data);
-        let dest = format!("{}\\windcli.exe", install_dir);
+        let install_dir = std::path::Path::new(&app_data)
+            .join("winwork")
+            .join("wind-cli");
+        let dest = install_dir.join("windcli.exe");
         (
             "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli.exe".to_string(),
-            dest,
+            dest.to_string_lossy().into_owned(),
         )
     } else {
-        // macOS / Linux
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let install_dir = format!("{}/.local/bin", home);
-        let dest = format!("{}/windcli", install_dir);
-        let url = if cfg!(target_os = "macos") {
-            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string()
-        } else {
-            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string()
-        };
-        (url, dest)
+        let install_dir = std::path::Path::new(&home).join(".local").join("bin");
+        let dest = install_dir.join("windcli");
+        let url = "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string();
+        (url, dest.to_string_lossy().into_owned())
     };
 
     // Create install directory
