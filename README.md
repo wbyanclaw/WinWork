@@ -38,4 +38,4 @@ Preview the current UI: [WinWork Mockup](docs/WinWork-mockup.html)
 ## Related
 
 - [wind-cli](https://github.com/wbyanclaw/wind-cli)
-- [LLM Wiki SDK](https://github.com/wbyanclaw/wind-wiki)
+- [LLM Wiki SDK](https://github.com/wbyanclaw/llm-wiki)
