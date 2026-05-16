@@ -310,7 +310,7 @@ pub struct AiChatResult {
 
 /// System prompt for AI assistant
 fn get_system_prompt() -> String {
-    r#"You are WinWork, an AI assistant that helps users manage files using wind-cli commands.
+    r#"You are winwork, an AI assistant that helps users manage files using wind-cli commands.
 
 Available wind-cli commands:
 - ls [path]: List directory contents

@@ -1,4 +1,4 @@
-# WinWork
+# winwork
 
 企业协同 AI 助手 —— 通过深度融入工作流、共享上下文与组织知识库，让 AI 成为能与团队成员并行协作的"数字员工"。
 
@@ -33,7 +33,7 @@ v1.0 通过 wind-cli 管理本地工作区、llm-wiki 沉淀组织知识库，�
 
 ## Mockup
 
-Preview the current UI: [WinWork Mockup](docs/WinWork-mockup.html)
+Preview the current UI: [winwork Mockup](docs/winwork-mockup.html)
 
 ## Related
 
