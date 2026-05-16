@@ -20,8 +20,8 @@ jobs:
         include:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact: WinWork-windows-x86_64.exe
-            binary: WinWork.exe
+            artifact: winwork-windows-x86_64
+            binary: winwork.exe
 
     runs-on: ${{ matrix.platform }}
 
