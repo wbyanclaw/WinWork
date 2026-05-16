@@ -66,10 +66,9 @@ jobs:
       - name: Attach to release
         env:
           TAG: ${{ github.ref }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           echo "Uploading to $TAG"
           for f in artifacts/*/*; do
             echo "Uploading $(basename "$f")"
-            gh release upload "$TAG" "$f" --clobber
+            gh release upload "$TAG" "$f" --clobber --repo ${{ github.repository }}
           done
