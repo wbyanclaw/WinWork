@@ -63,6 +63,19 @@ jobs:
       - name: List artifacts
         run: ls -lh artifacts/
 
+      - name: Create release if not exists
+        env:
+          TAG: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${TAG##refs/tags/}"
+          if gh release view "$TAG_NAME" --repo ${{ github.repository }} 2>/dev/null; then
+            echo "Release $TAG_NAME already exists"
+          else
+            echo "Creating release $TAG_NAME"
+            gh release create "$TAG_NAME" --title "winwork $TAG_NAME" --repo ${{ github.repository }}
+          fi
+
       - name: Attach to release
         env:
           TAG: ${{ github.ref }}
