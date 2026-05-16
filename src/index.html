@@ -78,13 +78,18 @@
   <div id="envStatusBar" class="flex items-center gap-2 mr-1">
     <span class="text-[11px] text-faint">检查环境...</span>
   </div>
+  <!-- API Key button -->
+  <button onclick="showApiKeyModal()" id="apiKeyBtn" class="flex items-center gap-1 text-[11px] text-muted hover:text-brand transition-colors mr-2 px-2 py-1 rounded hover:bg-slate-100">
+    <i data-lucide="key" class="w-3 h-3"></i>
+    <span id="apiKeyStatus">设置API</span>
+  </button>
   <!-- Window controls -->
   <div class="flex items-center" id="winControls">
     <button onclick="winMinimize()" class="titlebar-btn" title="最小化">
       <i data-lucide="minus" class="w-4 h-4" style="stroke-width:2"></i>
     </button>
     <button onclick="winMaximize()" class="titlebar-btn" title="最大化" id="btn-maximize">
-      <i data-lucide="square" class="w-3.5 h-3.5" style="stroke-width:1.5"></i>
+      <i data-lucide="maximize-2" class="w-3.5 h-3.5" style="stroke-width:1.5"></i>
     </button>
     <button onclick="winClose()" class="titlebar-btn" id="btn-close" title="关闭">
       <i data-lucide="x" class="w-4 h-4" style="stroke-width:2"></i>
@@ -114,6 +119,24 @@
     <p class="text-[11px] text-faint mt-4">
       安装后若弹出安全警告，点击"仍要运行"即可
     </p>
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div id="apiKeyModal" class="hidden fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-ink">MiniMax API 配置</h3>
+      <button onclick="hideApiKeyModal()" class="text-slate-400 hover:text-slate-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <p class="text-sm text-muted mb-4">输入 MiniMax API Key 以启用 AI 对话功能</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-..." class="w-full px-4 py-2.5 border border-border rounded-xl text-sm mb-3 focus:outline-none focus:border-brand">
+    <div class="flex gap-2">
+      <button onclick="clearApiKey()" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">清除</button>
+      <button onclick="saveApiKey()" class="flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700">保存</button>
+    </div>
   </div>
 </div>
 
@@ -192,6 +215,46 @@
 
     // ── State ─────────────────────────────────────────────────
     let lastResult = null;
+    let apiKey = localStorage.getItem('minimax_api_key') || '';
+    updateApiKeyStatus();
+
+    // ── API Key Management ───────────────────────────────────
+    function showApiKeyModal() {
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+      document.getElementById('apiKeyInput').value = apiKey;
+      lucide.createIcons();
+    }
+
+    function hideApiKeyModal() {
+      document.getElementById('apiKeyModal').classList.add('hidden');
+    }
+
+    function saveApiKey() {
+      const input = document.getElementById('apiKeyInput');
+      apiKey = input.value.trim();
+      localStorage.setItem('minimax_api_key', apiKey);
+      updateApiKeyStatus();
+      hideApiKeyModal();
+    }
+
+    function clearApiKey() {
+      apiKey = '';
+      localStorage.removeItem('minimax_api_key');
+      document.getElementById('apiKeyInput').value = '';
+      updateApiKeyStatus();
+    }
+
+    function updateApiKeyStatus() {
+      const status = document.getElementById('apiKeyStatus');
+      const btn = document.getElementById('apiKeyBtn');
+      if (apiKey) {
+        status.textContent = 'AI 已启用';
+        btn.classList.add('text-emerald-600');
+      } else {
+        status.textContent = '设置API';
+        btn.classList.remove('text-emerald-600');
+      }
+    }
 
     // ── Init ─────────────────────────────────────────────────
     async function init() {
@@ -446,9 +509,6 @@
       const msgs = document.getElementById('messages');
       document.getElementById('welcomeScreen')?.remove();
 
-      const key = routeCommand(text);
-      const args = buildArgs(key, text);
-
       // Human message
       appendMessage('user', text, msgs);
       const aid = 'm' + Date.now();
@@ -459,42 +519,88 @@
       msgs.scrollTop = msgs.scrollHeight;
 
       try {
-        const result = await invoke('run_wind_command', { args: args.join(' ') });
-        lastResult = result;
+        let result;
+        let responseText;
 
-        // Update agent bubble with result
-        setTimeout(() => {
-          const bubble = document.getElementById(aid + '-bubble');
-          if (!bubble) return;
-          const cmd = args.join(' ');
-          const cmdName = args[0];
+        if (apiKey) {
+          // Use AI chat mode
+          const aiResult = await invoke('ai_chat', { message: text, apiKey: apiKey });
+          result = aiResult;
+          responseText = aiResult.response;
 
-          bubble.innerHTML = `
-            <p class="mb-2">${escHtml(text)}</p>
-            <div class="mt-2 rounded-lg border border-border overflow-hidden">
-              <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
-                <i data-lucide="zap" class="w-3 h-3 text-brand" style="stroke-width:2"></i>
-                <span class="text-[11px] text-muted font-medium">windcli — ${escHtml(cmdName)}</span>
-              </div>
-              <div class="px-3 py-2.5">
-                <div class="flex items-center gap-1.5 mb-2">
-                  <span class="text-[10px] ${result.ok ? 'bg-successBg text-success border border-emerald-200' : 'bg-red-50 text-red-500 border border-red-200'} px-1.5 py-0.5 rounded-full font-medium">${result.ok ? '✓ 执行成功' : '✗ 执行失败'}</span>
+          // Update bubble with AI response
+          setTimeout(() => {
+            const bubble = document.getElementById(aid + '-bubble');
+            if (!bubble) return;
+
+            let commandsHtml = '';
+            if (aiResult.commands_executed && aiResult.commands_executed.length > 0) {
+              commandsHtml = '<div class="mt-3 space-y-2">';
+              aiResult.commands_executed.forEach((cmd, i) => {
+                const cmdResult = aiResult.command_results[i];
+                commandsHtml += `
+                  <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
+                    <div class="font-mono text-[11px] text-brand mb-1">$ wind ${escHtml(cmd)}</div>
+                    ${cmdResult.ok ? '<span class="text-[10px] text-emerald-600">✓ 成功</span>' : '<span class="text-[10px] text-red-500">✗ 失败</span>'}
+                  </div>`;
+              });
+              commandsHtml += '</div>';
+            }
+
+            bubble.innerHTML = `
+              <p class="mb-2">${escHtml(text)}</p>
+              <div class="text-sm leading-relaxed whitespace-pre-wrap">${escHtml(responseText).replace(/\n/g, '<br>')}</div>
+              ${commandsHtml}`;
+
+            lucide.createIcons();
+            msgs.scrollTop = msgs.scrollHeight;
+          }, 500);
+        } else {
+          // Use keyword routing mode
+          const key = routeCommand(text);
+          const args = buildArgs(key, text);
+
+          result = await invoke('run_wind_command', { args: args.join(' ') });
+
+          // Update bubble with result
+          setTimeout(() => {
+            const bubble = document.getElementById(aid + '-bubble');
+            if (!bubble) return;
+            const cmd = args.join(' ');
+            const cmdName = args[0];
+
+            bubble.innerHTML = `
+              <p class="mb-2">${escHtml(text)}</p>
+              <div class="mt-2 rounded-lg border border-border overflow-hidden">
+                <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
+                  <i data-lucide="zap" class="w-3 h-3 text-brand" style="stroke-width:2"></i>
+                  <span class="text-[11px] text-muted font-medium">windcli — ${escHtml(cmdName)}</span>
                 </div>
-                <div class="font-mono bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2">$ wind ${escHtml(cmd)}</div>
-                ${result.data ? `<pre class="text-[11px] text-muted leading-relaxed overflow-x-auto">${highlightJSON(result.data)}</pre>` : ''}
-                ${result.stderr ? `<div class="text-[11px] text-red-500 mt-1">${escHtml(result.stderr)}</div>` : ''}
-              </div>
-            </div>`;
+                <div class="px-3 py-2.5">
+                  <div class="flex items-center gap-1.5 mb-2">
+                    <span class="text-[10px] ${result.ok ? 'bg-successBg text-success border border-emerald-200' : 'bg-red-50 text-red-500 border border-red-200'} px-1.5 py-0.5 rounded-full font-medium">${result.ok ? '✓ 执行成功' : '✗ 执行失败'}</span>
+                  </div>
+                  <div class="font-mono bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2">$ wind ${escHtml(cmd)}</div>
+                  ${result.data ? `<pre class="text-[11px] text-muted leading-relaxed overflow-x-auto">${highlightJSON(result.data)}</pre>` : ''}
+                  ${result.stderr ? `<div class="text-[11px] text-red-500 mt-1">${escHtml(result.stderr)}</div>` : ''}
+                </div>
+              </div>`;
 
-          // Update detail panel
-          updateDetailPanel(result, cmd);
-          lucide.createIcons();
-          msgs.scrollTop = msgs.scrollHeight;
-        }, 500);
+            // Update detail panel
+            updateDetailPanel(result, cmd);
+            lucide.createIcons();
+            msgs.scrollTop = msgs.scrollHeight;
+          }, 500);
+        }
+
+        lastResult = result;
       } catch (e) {
         const bubble = document.getElementById(aid + '-bubble');
         if (bubble) {
           bubble.innerHTML = `<p>⚠️ 无法执行命令: ${escHtml(String(e))}</p>`;
+        }
+      }
+    }
         }
       }
     }

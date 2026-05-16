@@ -4,6 +4,9 @@ use std::process::{Command as StdCommand, Stdio};
 use tauri_plugin_opener::open_url as opener_open_url;
 use which::which;
 
+mod minimax;
+use minimax::{ChatMessage, MiniMaxClient};
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WindResult {
     pub ok: bool,
@@ -294,6 +297,137 @@ fn list_wiki() -> WindResult {
     run_wind(&["wiki", "status"])
 }
 
+/// AI Chat result
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AiChatResult {
+    pub ok: bool,
+    pub response: String,
+    pub commands_executed: Vec<String>,
+    pub command_results: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// System prompt for AI assistant
+fn get_system_prompt() -> String {
+    r#"You are WinWork, an AI assistant that helps users manage files using wind-cli commands.
+
+Available wind-cli commands:
+- ls [path]: List directory contents
+- read <file>: Read file content (≤10MB)
+- write <file> --stdin: Write file content
+- mkdir <path>: Create directory
+- rm <path> [--force]: Delete file or directory
+- wiki status: Show LLM Wiki status
+- wiki lint: Lint LLM Wiki
+- version: Show wind-cli version
+- init <path>: Initialize workspace
+
+Workspace is isolated at ~/.local/share/wind/workspace/
+
+When user asks to perform file operations, you should:
+1. Execute the appropriate wind-cli command
+2. Report the result clearly in Chinese
+3. Be helpful and concise
+
+Example interactions:
+User: 列出当前目录的文件
+You: I'll list the files in your workspace.
+
+[Executes: wind ls ~/.local/share/wind/workspace/]
+Result: Shows the directory listing
+
+User: 创建一个新文件夹叫test
+You: I'll create a directory called "test" for you.
+
+[Executes: wind mkdir test]
+Result: Directory created successfully
+
+Always wrap commands in [Executes: ...] format and results in [Result: ...] format."#.to_string()
+}
+
+/// AI Chat - understand user intent and execute wind-cli commands
+#[tauri::command]
+async fn ai_chat(
+    message: String,
+    api_key: String,
+    model: Option<String>,
+) -> Result<AiChatResult, String> {
+    let client = MiniMaxClient::new(api_key, model);
+
+    let workspace = get_workspace_path();
+
+    // Build messages with system prompt
+    let system_msg = format!(
+        "{}\n\nCurrent workspace: {}",
+        get_system_prompt(),
+        workspace
+    );
+
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: system_msg,
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: message,
+        },
+    ];
+
+    // Call MiniMax API
+    let response = client.chat(messages).await.map_err(|e| e.to_string())?;
+
+    // Extract response content
+    let response_text = response
+        .choices
+        .first()
+        .map(|c| c.message.content.clone())
+        .unwrap_or_default();
+
+    // Parse and execute commands from response
+    let mut commands_executed = Vec::new();
+    let mut command_results = Vec::new();
+
+    // Extract commands from [Executes: ...] format
+    for line in response_text.lines() {
+        if line.trim().starts_with("[Executes:") {
+            if let Some(cmd) = line.trim().strip_prefix("[Executes:") {
+                let cmd = cmd.trim_end_matches(']').trim();
+                commands_executed.push(cmd.to_string());
+
+                // Execute the command
+                let result = run_wind_command(cmd.to_string());
+                command_results.push(serde_json::json!({
+                    "command": cmd,
+                    "ok": result.ok,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "exit_code": result.exit_code,
+                    "data": result.data,
+                }));
+            }
+        }
+    }
+
+    Ok(AiChatResult {
+        ok: true,
+        response: response_text,
+        commands_executed,
+        command_results,
+        error: None,
+    })
+}
+
+/// Get API config info (returns a placeholder - actual key should be stored securely)
+#[tauri::command]
+fn get_api_config() -> serde_json::Value {
+    serde_json::json!({
+        "default_model": "MiniMax-M2.7-highspeed",
+        "base_url": "https://df.dawnloadai.com:9888/v1"
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -315,6 +449,8 @@ pub fn run() {
             read_file,
             get_wiki_dir,
             list_wiki,
+            ai_chat,
+            get_api_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
