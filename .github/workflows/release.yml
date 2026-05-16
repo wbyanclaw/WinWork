@@ -68,8 +68,9 @@ jobs:
           TAG: ${{ github.ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Uploading to $TAG"
+          TAG_NAME="${TAG##refs/tags/}"
+          echo "Uploading to $TAG_NAME"
           for f in artifacts/*/*; do
             echo "Uploading $(basename "$f")"
-            gh release upload "$TAG" "$f" --clobber --repo ${{ github.repository }}
+            gh release upload "$TAG_NAME" "$f" --clobber --repo ${{ github.repository }}
           done
