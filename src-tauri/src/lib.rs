@@ -25,12 +25,53 @@ pub struct WindTool {
 }
 
 /// Fast PATH lookup for windcli — no subprocess spawning, returns instantly
+/// Also checks the install paths used by trigger_install()
 fn find_windcli() -> Option<String> {
+    // 1. Check PATH first
     for name in &["windcli", "wind"] {
         if which(name).is_ok() {
             return Some(name.to_string());
         }
     }
+
+    // 2. Check install paths used by trigger_install()
+    #[cfg(target_os = "windows")]
+    {
+        // Try LOCALAPPDATA\winwork\wind-cli\windcli.exe
+        if let Some(appdata) = std::env::var_os("LOCALAPPDATA") {
+            let path = std::path::Path::new(&appdata)
+                .join("winwork")
+                .join("wind-cli")
+                .join("windcli.exe");
+            if path.exists() {
+                return Some(path.to_string_lossy().into_owned());
+            }
+        }
+        // Try APPDATA\winwork\wind-cli\windcli.exe (fallback on some Windows configs)
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            let path = std::path::Path::new(&appdata)
+                .join("winwork")
+                .join("wind-cli")
+                .join("windcli.exe");
+            if path.exists() {
+                return Some(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Check ~/.local/bin/windcli (used by trigger_install on Unix/macOS)
+        if let Some(home) = std::env::var_os("HOME") {
+            let path = std::path::Path::new(&home)
+                .join(".local")
+                .join("bin")
+                .join("windcli");
+            if path.exists() {
+                return Some(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+
     None
 }
 
