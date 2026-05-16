@@ -275,6 +275,18 @@ fn wiki_lint() -> WindResult {
     run_wind(&["wiki", "lint"])
 }
 
+/// Ingest a file into the wiki via `wind wiki ingest <path>`
+#[tauri::command]
+fn wiki_ingest(path: String) -> WindResult {
+    run_wind(&["wiki", "ingest", &path])
+}
+
+/// Query the wiki via `wind wiki query <question>`
+#[tauri::command]
+fn wiki_query(question: String) -> WindResult {
+    run_wind(&["wiki", "query", &question])
+}
+
 /// Read a file from workspace via `wind read <path>`
 #[tauri::command]
 fn read_file(path: String) -> WindResult {
@@ -597,6 +609,8 @@ pub fn run() {
             trigger_install,
             wiki_status,
             wiki_lint,
+            wiki_ingest,
+            wiki_query,
             read_file,
             get_wiki_dir,
             list_wiki,
