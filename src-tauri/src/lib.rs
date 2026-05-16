@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
+use tauri_plugin_opener::open_url as opener_open_url;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WindResult {
@@ -219,6 +220,28 @@ fn check_llm_wiki() -> HashMap<String, String> {
     result
 }
 
+/// Open a URL in the default browser
+#[tauri::command]
+fn open_url(url: String) -> WindResult {
+    let result = opener_open_url(&url, None::<&str>);
+    match result {
+        Ok(_) => WindResult {
+            ok: true,
+            stdout: format!("Opened: {}", url),
+            stderr: String::new(),
+            exit_code: 0,
+            data: None,
+        },
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("Failed to open URL: {}", e),
+            exit_code: 1,
+            data: None,
+        },
+    }
+}
+
 /// Trigger wind-cli install via PowerShell one-liner
 #[tauri::command]
 fn trigger_install() -> WindResult {
@@ -285,6 +308,7 @@ pub fn run() {
             list_workspace,
             check_windcli,
             check_llm_wiki,
+            open_url,
             trigger_install,
             wiki_status,
             wiki_lint,

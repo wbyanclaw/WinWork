@@ -257,7 +257,7 @@
     }
 
     // ── Environment Check ─────────────────────────────────────
-    let envState = { windcli: null, llmwiki: null };
+    let envState = { windcli: null, llmwiki: null, rechecking: false };
 
     async function checkAllEnv() {
       const statusBar = document.getElementById('envStatusBar');
@@ -288,18 +288,30 @@
       if (allReady) {
         statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪</span>`;
       } else if (envState.windcli) {
-        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>wind-cli 已就绪</span>`;
+        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>wind-cli 已就绪，等待初始化</span>`;
       } else {
         statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-slate-50 border border-border text-slate-500 text-[11px] px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>未安装</span>`;
       }
 
-      // Show modal if anything missing
+      // Show/hide modal
       if (!envState.windcli || !envState.llmwiki) {
         modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
       }
 
       updateStartBtn();
       lucide.createIcons();
+    }
+
+    async function openDownload(url) {
+      try {
+        // Use Tauri Rust command (preferred — works even without @tauri-apps/api)
+        await invoke('open_url', { url });
+      } catch(e) {
+        // Fallback: window.open
+        window.open(url, '_blank');
+      }
     }
 
     function renderModalItem(which, found, msg) {
@@ -309,34 +321,56 @@
       if (found) {
         statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-medium';
         statusEl.textContent = '✓ 已安装';
-        actionEl.innerHTML = `<button onclick="runWindcliCmd('wiki status')" class="text-xs text-brand hover:underline">查看状态 →</button>`;
+        if (which === 'windcli') {
+          actionEl.innerHTML = `<button onclick="recheckAll()" class="text-xs text-slate-400 hover:text-brand transition-colors">点击重新检测 →</button>`;
+        } else {
+          actionEl.innerHTML = `<button onclick="recheckAll()" class="text-xs text-slate-400 hover:text-brand transition-colors">点击重新检测 →</button>`;
+        }
       } else if (which === 'windcli') {
-        statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium';
+        statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-500 font-medium';
         statusEl.textContent = '✗ 未安装';
-        const installScript = navigator.platform.includes('Win')
-          ? 'irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex'
-          : 'curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh';
-        actionEl.innerHTML = `
-          <div class="bg-slate-800 text-emerald-400 font-mono text-[11px] rounded-lg px-3 py-2 leading-relaxed">${escHtml(installScript)}</div>
-          <button onclick="openInstallLink()" class="mt-2 text-xs bg-brand text-white rounded-lg px-3 py-1.5 hover:bg-blue-700 transition-colors">打开下载页</button>`;
+        const isWin = navigator.platform.includes('Win') || /Win/.test(navigator.userAgent);
+        if (isWin) {
+          actionEl.innerHTML = `
+            <div class="space-y-2">
+              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe')" class="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i>下载 windcli.exe（Windows x64）
+              </button>
+              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/latest')" class="w-full bg-slate-100 text-slate-600 rounded-lg py-1.5 text-xs hover:bg-slate-200 transition-colors">
+                更多下载选项（install.ps1 / ZIP）
+              </button>
+              <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
+                <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>
+                <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
+              </div>
+            </div>`;
+        } else {
+          actionEl.innerHTML = `
+            <div class="space-y-2">
+              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/latest')" class="w-full bg-brand text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i>打开 wind-cli 下载页面
+              </button>
+              <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
+                <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>
+                <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
+              </div>
+            </div>`;
+        }
       } else {
         statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500';
-        statusEl.textContent = msg || '⚠ 需初始化';
-        actionEl.innerHTML = `<button onclick="openInstallLink()" class="text-xs text-brand hover:underline">安装 wind-cli 后自动就绪 →</button>`;
+        statusEl.textContent = msg || '⚠ 需先安装 wind-cli';
+        actionEl.innerHTML = `<div class="text-xs text-slate-400">安装 wind-cli 后即可使用</div>`;
       }
     }
 
-    function openInstallLink() {
-      window.open('https://github.com/wbyanclaw/wind-cli/releases/latest', '_blank');
-    }
-
-    async function runWindcliCmd(cmd) {
-      try {
-        const result = await invoke('run_wind_command', { args: cmd });
-        alert(cmd + ':\n' + (result.stdout || result.stderr || '无输出'));
-      } catch(e) {
-        alert('执行失败: ' + e);
-      }
+    async function recheckAll() {
+      if (envState.rechecking) return;
+      envState.rechecking = true;
+      const btn = document.getElementById('recheckBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '检测中...'; }
+      await checkAllEnv();
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 重新检测'; }
+      envState.rechecking = false;
     }
 
     function updateStartBtn() {
@@ -344,7 +378,13 @@
       if (!btn) return;
       const ready = envState.windcli && envState.llmwiki;
       btn.disabled = !ready;
-      btn.textContent = ready ? '开始使用 WinWork →' : '请先安装缺失组件';
+      if (ready) {
+        btn.textContent = '开始使用 WinWork →';
+        btn.className = 'w-full bg-brand text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer';
+      } else {
+        btn.textContent = '请先安装 wind-cli 后点击上方「检测安装结果」';
+        btn.className = 'w-full bg-slate-200 text-slate-500 rounded-xl py-2.5 text-sm cursor-not-allowed';
+      }
     }
 
     function closeInstallModal() {
