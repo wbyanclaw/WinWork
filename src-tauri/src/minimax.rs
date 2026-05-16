@@ -82,6 +82,7 @@ pub struct Choice {
 
 #[derive(Debug, Deserialize)]
 pub struct ResponseMessage {
+    #[allow(dead_code)]
     pub role: String,
     pub content: String,
 }

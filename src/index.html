@@ -345,9 +345,6 @@
     }
 
     // ── Environment Check ─────────────────────────────────────
-    let envState = { windcli: null, llmwiki: null, rechecking: false };
-
-    // ── Environment Check ─────────────────────────────────────
     let envState = { windcli: false, llmwiki: false };
 
     async function checkAllEnv() {
@@ -443,7 +440,6 @@
       if (btnText) btnText.textContent = '安装超时，请手动下载后重试';
       const btn = document.getElementById('modal-main-btn');
       if (btn) btn.disabled = false;
-    }
     }
 
     // ── Helpers ─────────────────────────────────────────────
@@ -601,9 +597,6 @@
         }
       }
     }
-        }
-      }
-    }
 
     function appendMessage(role, text, container) {
       const div = document.createElement('div');
@@ -753,6 +746,176 @@
         // Fallback: simulate for browser dev
         return { ok: true, data: { entries: [] }, stderr: '' };
       }
+    }
+
+    // ==========================================================================
+    // State Persistence — winwork v0.2
+    // Storage: Tauri backend → ~/.winwork/ (via save_state / load_state)
+    // Layout:
+    //   ~/.winwork/state.json          — global: active workspace
+    //   ~/.winwork/workspaces/<name>/chat.json    — chat history
+    //   ~/.winwork/workspaces/<name>/tree_state.json — file tree state
+    //   ~/.winwork/workspaces/<name>/settings.json  — workspace settings
+    // ==========================================================================
+
+    // Current app state (in-memory)
+    let appState = {
+      activeWorkspace: 'default',
+      workspaces: [],
+      rightPanelTab: 'trace',
+      // chatMessages: [], // loaded dynamically
+    };
+
+    // Load global state.json and initialize default workspace on first launch
+    async function loadAppState() {
+      try {
+        const state = await invoke('load_state', { relativePath: 'state.json' });
+        if (state && state !== null && typeof state === 'object') {
+          appState.activeWorkspace = state.activeWorkspace || 'default';
+          appState.rightPanelTab = state.rightPanelTab || 'trace';
+        }
+      } catch(e) {
+        // state.json doesn't exist yet — use defaults
+        appState.activeWorkspace = 'default';
+      }
+
+      // Ensure default workspace exists
+      try {
+        await invoke('ensure_workspace_dir', { name: appState.activeWorkspace });
+      } catch(e) {}
+
+      // Load workspace-level state
+      await loadWorkspaceState();
+
+      // Restore right panel tab
+      const tabId = 'tab-' + appState.rightPanelTab;
+      const tabBtn = document.getElementById(tabId);
+      if (tabBtn) switchTab(appState.rightPanelTab, tabBtn);
+    }
+
+    // Load chat history and tree state for the active workspace
+    async function loadWorkspaceState() {
+      const ws = appState.activeWorkspace;
+      try {
+        const chat = await invoke('load_state', { relativePath: `workspaces/${ws}/chat.json` });
+        if (chat && chat !== null && Array.isArray(chat.messages)) {
+          restoreChatHistory(chat.messages);
+        }
+      } catch(e) {}
+
+      try {
+        const tree = await invoke('load_state', { relativePath: `workspaces/${ws}/tree_state.json` });
+        if (tree && tree !== null) {
+          // tree expansion state will be used when loadFileTree renders items
+          window._treeState = tree.expanded || [];
+        }
+      } catch(e) {}
+    }
+
+    // Restore chat history from persisted messages array
+    function restoreChatHistory(messages) {
+      const container = document.getElementById('messages');
+      if (!container) return;
+      document.getElementById('welcomeScreen')?.remove();
+      messages.forEach(msg => {
+        if (msg.role === 'user') {
+          appendMessage('user', msg.text, container);
+        } else {
+          appendMessage('agent', msg.text, container);
+        }
+      });
+    }
+
+    // Save current chat messages to the active workspace
+    async function saveChatHistory() {
+      const container = document.getElementById('messages');
+      if (!container) return;
+      const bubbles = container.querySelectorAll('.msg');
+      const messages = [];
+      bubbles.forEach(bubble => {
+        if (bubble.classList.contains('user')) {
+          const text = bubble.querySelector('.bg-brand')?.textContent?.trim() || '';
+          if (text) messages.push({ role: 'user', text });
+        } else if (bubble.classList.contains('agent') || (bubble.querySelector('.bg-white') && !bubble.classList.contains('user'))) {
+          const text = bubble.querySelector('.bg-white')?.textContent?.trim() ||
+                       bubble.querySelector('[id$="-bubble"]')?.textContent?.trim() || '';
+          if (text) messages.push({ role: 'agent', text });
+        }
+      });
+      try {
+        await invoke('save_state', {
+          relativePath: `workspaces/${appState.activeWorkspace}/chat.json`,
+          data: { messages }
+        });
+      } catch(e) {
+        console.error('Failed to save chat history:', e);
+      }
+    }
+
+    // Save right panel tab state (per workspace)
+    async function saveRightPanelTab(tabName) {
+      appState.rightPanelTab = tabName;
+      try {
+        await invoke('save_state', {
+          relativePath: `workspaces/${appState.activeWorkspace}/settings.json`,
+          data: { rightPanelTab: tabName }
+        });
+      } catch(e) {
+        console.error('Failed to save right panel tab:', e);
+      }
+    }
+
+    // Update global state (active workspace)
+    async function saveGlobalState() {
+      try {
+        await invoke('save_state', {
+          relativePath: 'state.json',
+          data: {
+            activeWorkspace: appState.activeWorkspace,
+            rightPanelTab: appState.rightPanelTab,
+          }
+        });
+      } catch(e) {
+        console.error('Failed to save global state:', e);
+      }
+    }
+
+    // Switch active workspace
+    async function switchWorkspace(name) {
+      if (name === appState.activeWorkspace) return;
+      // Save current chat before switching
+      await saveChatHistory();
+      appState.activeWorkspace = name;
+      try {
+        await invoke('ensure_workspace_dir', { name });
+      } catch(e) {}
+      await saveGlobalState();
+      await loadWorkspaceState();
+      await loadFileTree();
+    }
+
+    // Patch appendMessage to auto-save chat after each message
+    const _origAppendMessage = appendMessage;
+    appendMessage = function(role, text, container) {
+      _origAppendMessage(role, text, container);
+      // Debounced save — don't block UI
+      clearTimeout(window._chatSaveTimer);
+      window._chatSaveTimer = setTimeout(() => saveChatHistory(), 2000);
+    };
+
+    // Patch switchTab to persist tab selection per workspace
+    const _origSwitchTab = switchTab;
+    switchTab = function(name, btn) {
+      _origSwitchTab(name, btn);
+      saveRightPanelTab(name);
+    };
+
+    // ── Init (updated for persistence) ───────────────────────
+    async function init() {
+      lucide.createIcons();
+      await checkAllEnv();
+      await loadAppState();
+      await loadFileTree();
     }
 
     // ── Start ─────────────────────────────────────────────────
