@@ -428,6 +428,157 @@ fn get_api_config() -> serde_json::Value {
     })
 }
 
+// ============================================================================
+// State Persistence — winwork v0.2
+// Storage: ~/.winwork/ via directories crate
+// Layout:
+//   ~/.winwork/
+//   ├── state.json              # global: active workspace, app preferences
+//   └── workspaces/
+//       └── <name>/
+//           ├── chat.json       # chat history
+//           ├── tree_state.json # file tree expansion state
+//           └── settings.json   # workspace-level settings
+// ============================================================================
+
+/// Resolve the winwork root directory (~/.winwork/)
+fn winwork_root() -> Result<std::path::PathBuf, String> {
+    directories::ProjectDirs::from("com", "winwork", "winwork")
+        .map(|d| d.data_dir().to_path_buf())
+        .ok_or_else(|| "Failed to resolve winwork data directory".to_string())
+}
+
+/// Resolve a path relative to the winwork root (e.g. "state.json" → ~/.winwork/state.json)
+fn winwork_path(relative: &str) -> Result<std::path::PathBuf, String> {
+    Ok(winwork_root()?.join(relative))
+}
+
+/// Write JSON data to a file in the winwork directory.
+/// Errors are surfaced (never silently swallowed).
+#[tauri::command]
+fn save_state(relative_path: String, data: serde_json::Value) -> Result<(), String> {
+    let path = winwork_path(&relative_path)?;
+
+    // Ensure parent directory exists
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
+    }
+
+    let json = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize state: {}", e))?;
+
+    std::fs::write(&path, json)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+
+    Ok(())
+}
+
+/// Read JSON data from a file in the winwork directory.
+/// Returns null JSON value if the file does not exist (not an error).
+/// Errors other than NotFound are surfaced.
+#[tauri::command]
+fn load_state(relative_path: String) -> Result<serde_json::Value, String> {
+    let path = winwork_path(&relative_path)?;
+
+    let json_str = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // File doesn't exist yet — return null, not an error
+            return Ok(serde_json::Value::Null);
+        }
+        Err(e) => return Err(format!("Failed to read {}: {}", path.display(), e)),
+    };
+
+    serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
+}
+
+/// Ensure a workspace directory exists and return its path.
+/// Returns the workspace path as a string.
+#[tauri::command]
+fn ensure_workspace_dir(name: String) -> Result<String, String> {
+    let path = winwork_path("workspaces")?.join(&name);
+    std::fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create workspace '{}': {}", name, e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// List all workspace names.
+#[tauri::command]
+fn list_workspaces() -> Result<Vec<String>, String> {
+    let workspaces_path = winwork_path("workspaces")?;
+
+    if !workspaces_path.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut names: Vec<String> = std::fs::read_dir(&workspaces_path)
+        .map_err(|e| format!("Failed to read workspaces directory: {}", e))?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+
+    names.sort();
+    Ok(names)
+}
+
+/// Delete a workspace by name.
+/// Fails if it is the last remaining workspace.
+#[tauri::command]
+fn delete_workspace(name: String) -> Result<(), String> {
+    // Load global state to check active workspace
+    let state_path = winwork_path("state.json")?;
+    let state: serde_json::Value = if state_path.exists() {
+        let s = std::fs::read_to_string(&state_path)
+            .map_err(|e| format!("Failed to read state: {}", e))?;
+        serde_json::from_str(&s).unwrap_or(serde_json::Value::Null)
+    } else {
+        serde_json::Value::Null
+    };
+
+    let active = state
+        .get("activeWorkspace")
+        .and_then(|v| v.as_str())
+        .unwrap_or("default");
+
+    // Guard: cannot delete the last workspace
+    let all = list_workspaces()?;
+    if all.len() <= 1 && all.first() == Some(&name) {
+        return Err("Cannot delete the last workspace".to_string());
+    }
+
+    let workspace_path = winwork_path("workspaces")?.join(&name);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace '{}' does not exist", name));
+    }
+
+    std::fs::remove_dir_all(&workspace_path)
+        .map_err(|e| format!("Failed to delete workspace '{}': {}", name, e))?;
+
+    // If we deleted the active workspace, switch to the first remaining one
+    if name == active {
+        let remaining = list_workspaces()?;
+        if let Some(first) = remaining.first() {
+            let new_state = serde_json::json!({
+                "activeWorkspace": first,
+            });
+            let _ = std::fs::write(&state_path, serde_json::to_string_pretty(&new_state).unwrap_or_default());
+        }
+    }
+
+    Ok(())
+}
+
+/// Get the winwork root directory path (for frontend use)
+#[tauri::command]
+fn get_winwork_root() -> String {
+    winwork_root()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "~/.winwork".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -451,6 +602,13 @@ pub fn run() {
             list_wiki,
             ai_chat,
             get_api_config,
+            // v0.2 persistence
+            save_state,
+            load_state,
+            ensure_workspace_dir,
+            list_workspaces,
+            delete_workspace,
+            get_winwork_root,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
