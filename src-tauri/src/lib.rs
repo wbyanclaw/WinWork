@@ -237,76 +237,26 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Install wind-cli: download .exe directly, spawn installer in background, return immediately
+/// Install wind-cli: open download URL in browser, return immediately so frontend can poll
 #[tauri::command]
 fn trigger_install() -> WindResult {
     let download_url = "https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe";
-    let installer_path = std::env::temp_dir().join("windcli_installer.exe");
-
-    // Download the binary directly
-    let body: Vec<u8> = match ureq::get(download_url).call() {
-        Ok(resp) => {
-            let mut buf = Vec::new();
-            match resp.into_reader().read_to_end(&mut buf) {
-                Ok(_) => buf,
-                Err(e) => {
-                    return WindResult {
-                        ok: false,
-                        stdout: String::new(),
-                        stderr: format!("读取下载内容失败: {}", e),
-                        exit_code: -1,
-                        data: None,
-                    };
-                }
-            }
-        }
-        Err(e) => {
-            return WindResult {
-                ok: false,
-                stdout: String::new(),
-                stderr: format!("连接下载服务器失败: {}", e),
-                exit_code: -1,
-                data: None,
-            };
-        }
-    };
-
-    if let Err(e) = std::fs::write(&installer_path, &body) {
-        return WindResult {
+    // Open download in default browser — the browser will handle the download
+    match opener_open_url(download_url, None::<&str>) {
+        Ok(_) => WindResult {
+            ok: true,
+            stdout: "下载已在浏览器中开始，请在浏览器下载完成后，双击运行 windcli.exe 进行安装。".to_string(),
+            stderr: String::new(),
+            exit_code: 0,
+            data: None,
+        },
+        Err(e) => WindResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("无法写入临时文件: {}", e),
+            stderr: format!("无法打开下载链接: {}", e),
             exit_code: -1,
             data: None,
-        };
-    }
-
-    // Spawn installer in a background thread — returns immediately so UI stays responsive
-    #[cfg(target_os = "windows")]
-    {
-        let path = installer_path;
-        std::thread::spawn(move || {
-            let _ = ::std::process::Command::new(&path).spawn();
-        });
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::thread::spawn(|| {
-            let script = "curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh";
-            let _ = ::std::process::Command::new("sh")
-                .arg("-c")
-                .arg(script)
-                .spawn();
-        });
-    }
-
-    WindResult {
-        ok: true,
-        stdout: format!("Download complete. Installer started: {}", installer_path.display()),
-        stderr: String::new(),
-        exit_code: 0,
-        data: None,
+        },
     }
 }
 
