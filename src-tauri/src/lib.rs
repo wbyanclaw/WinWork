@@ -240,15 +240,15 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Install wind-cli: open download URL in browser, return immediately so frontend can poll
+/// Install wind-cli: open releases page in browser, return immediately so frontend can poll
 #[tauri::command]
 fn trigger_install() -> WindResult {
-    let download_url = "https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe";
-    // Open download in default browser — the browser will handle the download
-    match opener_open_url(download_url, None::<&str>) {
+    let releases_url = "https://github.com/wbyanclaw/wind-cli/releases";
+    // Open releases page — user downloads and installs wind-cli manually
+    match opener_open_url(releases_url, None::<&str>) {
         Ok(_) => WindResult {
             ok: true,
-            stdout: "下载已在浏览器中开始，请在浏览器下载完成后，双击运行 windcli.exe 进行安装。".to_string(),
+            stdout: "已在浏览器中打开 wind-cli 下载页面，请在页面下载对应平台的 wind-cli，安装后重启本应用。".to_string(),
             stderr: String::new(),
             exit_code: 0,
             data: None,
@@ -256,7 +256,7 @@ fn trigger_install() -> WindResult {
         Err(e) => WindResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("无法打开下载链接: {}", e),
+            stderr: format!("无法打开下载页面: {}", e),
             exit_code: -1,
             data: None,
         },

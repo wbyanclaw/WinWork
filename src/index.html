@@ -410,7 +410,8 @@
         try {
           const result = await invoke('trigger_install');
           if (result.ok) {
-            btnText.textContent = '请在浏览器下载后运行 wind-cli';
+            btnText.textContent = '已在浏览器打开，请下载 wind-cli 安装后重启本应用';
+            btn.disabled = true;
             // Poll for installation
             await pollForInstall();
           } else {
@@ -434,12 +435,28 @@
         await checkAllEnv();
         if (envState.windcli) {
           updateModalUI();
+          enterMainUI();
           return;
         }
       }
-      if (btnText) btnText.textContent = '安装超时，请手动下载后重试';
+      if (btnText) btnText.textContent = '安装超时，请在浏览器下载 wind-cli 后点击重试';
       const btn = document.getElementById('modal-main-btn');
-      if (btn) btn.disabled = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.onclick = async () => {
+          await checkAllEnv();
+          if (envState.windcli) {
+            updateModalUI();
+            enterMainUI();
+          } else {
+            await handleModalButton();
+          }
+        };
+      }
+    }
+
+    function enterMainUI() {
+      document.getElementById('installModal').classList.add('hidden');
     }
 
     // ── Helpers ─────────────────────────────────────────────
