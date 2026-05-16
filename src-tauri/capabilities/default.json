@@ -7,6 +7,13 @@
     "core:default",
     "opener:default",
     "shell:allow-open",
+    "window:allow-minimize",
+    "window:allow-maximize",
+    "window:allow-unmaximize",
+    "window:allow-close",
+    "window:allow-is-maximized",
+    "window:allow-toggle-maximize",
+    "window:allow-set-focus",
     {
       "identifier": "shell:allow-execute",
       "allow": [
