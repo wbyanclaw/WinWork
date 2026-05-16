@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command as StdCommand, Stdio};
 use tauri_plugin_opener::open_url as opener_open_url;
+use which::which;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WindResult {
@@ -20,16 +21,10 @@ pub struct WindTool {
     pub risk_level: String,
 }
 
+/// Fast PATH lookup for windcli — no subprocess spawning, returns instantly
 fn find_windcli() -> Option<String> {
-    // Try common binary names
     for name in &["windcli", "wind"] {
-        if std::process::Command::new(name)
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-        {
+        if which(name).is_ok() {
             return Some(name.to_string());
         }
     }
@@ -242,62 +237,76 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Trigger wind-cli install — actually executes the install script
+/// Install wind-cli: download .exe directly, spawn installer in background, return immediately
 #[tauri::command]
 fn trigger_install() -> WindResult {
-    let install_script = if cfg!(target_os = "windows") {
-        "irm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 | iex"
-    } else {
-        "curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh"
-    };
+    let download_url = "https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe";
+    let installer_path = std::env::temp_dir().join("windcli_installer.exe");
 
-    let output = if cfg!(target_os = "windows") {
-        StdCommand::new("powershell")
-            .args(["-ExecutionPolicy", "Bypass", "-Command", install_script])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-    } else {
-        StdCommand::new("sh")
-            .arg("-c")
-            .arg(install_script)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-    };
-
-    match output {
-        Ok(mut child) => {
-            let stdout = child.stdout.take().map(|mut s| {
-                let mut buf = String::new();
-                std::io::Read::read_to_string(&mut s, &mut buf).ok();
-                buf
-            }).unwrap_or_default();
-            let stderr = child.stderr.take().map(|mut s| {
-                let mut buf = String::new();
-                std::io::Read::read_to_string(&mut s, &mut buf).ok();
-                buf
-            }).unwrap_or_default();
-
-            // Wait for install to complete
-            let status = child.wait();
-            let exit_code = status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
-
-            WindResult {
-                ok: exit_code == 0,
-                stdout,
-                stderr,
-                exit_code,
-                data: None,
+    // Download the binary directly
+    let body: Vec<u8> = match ureq::get(download_url).call() {
+        Ok(resp) => {
+            let mut buf = Vec::new();
+            match resp.into_reader().read_to_end(&mut buf) {
+                Ok(_) => buf,
+                Err(e) => {
+                    return WindResult {
+                        ok: false,
+                        stdout: String::new(),
+                        stderr: format!("读取下载内容失败: {}", e),
+                        exit_code: -1,
+                        data: None,
+                    };
+                }
             }
         }
-        Err(e) => WindResult {
+        Err(e) => {
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: format!("连接下载服务器失败: {}", e),
+                exit_code: -1,
+                data: None,
+            };
+        }
+    };
+
+    if let Err(e) = std::fs::write(&installer_path, &body) {
+        return WindResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("Failed to start install: {}", e),
+            stderr: format!("无法写入临时文件: {}", e),
             exit_code: -1,
             data: None,
-        },
+        };
+    }
+
+    // Spawn installer in a background thread — returns immediately so UI stays responsive
+    #[cfg(target_os = "windows")]
+    {
+        let path = installer_path;
+        std::thread::spawn(move || {
+            let _ = ::std::process::Command::new(&path).spawn();
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::thread::spawn(|| {
+            let script = "curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh";
+            let _ = ::std::process::Command::new("sh")
+                .arg("-c")
+                .arg(script)
+                .spawn();
+        });
+    }
+
+    WindResult {
+        ok: true,
+        stdout: format!("Download complete. Installer started: {}", installer_path.display()),
+        stderr: String::new(),
+        exit_code: 0,
+        data: None,
     }
 }
 

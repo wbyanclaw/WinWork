@@ -58,7 +58,7 @@
     /* Install modal */
     #installModal { position: fixed; inset: 0; z-index: 999; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; }
     #installModal.hidden { display: none; }
-    .modal-card { background: white; border-radius: 16px; padding: 32px; max-width: 480px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+    .modal-card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 420px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
   </style>
 </head>
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
@@ -92,58 +92,39 @@
   </div>
 </div>
 
-<!-- Environment Install Modal -->
+<!-- Environment Install Modal — single button, non-blocking install -->
 <div id="installModal" class="hidden">
-  <div class="modal-card">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-ink rounded-xl flex items-center justify-center flex-shrink-0">
-        <i data-lucide="folder-open" class="w-6 h-6 text-white" style="stroke-width:1.5"></i>
-      </div>
-      <div>
-        <h2 class="text-lg font-bold text-ink">WinWork 环境配置</h2>
-        <p class="text-sm text-muted">首次使用需安装依赖组件</p>
-      </div>
+  <div class="modal-card text-center">
+    <!-- App icon -->
+    <div class="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mx-auto mb-5">
+      <i data-lucide="folder-open" class="w-8 h-8 text-white" style="stroke-width:1.5"></i>
     </div>
 
-    <!-- wind-cli -->
-    <div class="border border-border rounded-xl p-4 mb-3" id="modal-windcli">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
-          <i data-lucide="terminal" class="w-4 h-4 text-brand"></i>
-          <span class="text-sm font-medium text-ink">wind-cli</span>
-        </div>
-        <span id="modal-windcli-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">检查中...</span>
-      </div>
-      <p class="text-xs text-muted mb-3">本地命令执行引擎，WinWork 的核心运行时</p>
-      <div id="modal-windcli-action"></div>
+    <!-- Title + subtitle -->
+    <h2 class="text-xl font-bold text-ink mb-1">首次使用，需安装 wind-cli</h2>
+    <p class="text-sm text-muted mb-6">WinWork 的核心运行时引擎，安装后即可使用</p>
+
+    <!-- Status area -->
+    <div id="modal-status" class="bg-slate-50 rounded-xl px-4 py-3 mb-4 text-sm text-slate-500 min-h-[48px] flex items-center justify-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+      等待安装
     </div>
 
-    <!-- llm-wiki -->
-    <div class="border border-border rounded-xl p-4 mb-4" id="modal-llmwiki">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
-          <i data-lucide="book-open" class="w-4 h-4 text-brand"></i>
-          <span class="text-sm font-medium text-ink">llm-wiki</span>
-        </div>
-        <span id="modal-llmwiki-status" class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">检查中...</span>
-      </div>
-      <p class="text-xs text-muted mb-3">本地知识库，支持文档 Ingest / Query / Lint</p>
-      <div id="modal-llmwiki-action"></div>
-    </div>
+    <!-- Single install button -->
+    <button onclick="doInstall()" id="btn-install" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mb-3">
+      <i data-lucide="zap" class="w-4 h-4"></i>
+      <span id="btn-install-text">⚡ 一键安装 wind-cli</span>
+    </button>
 
-    <!-- Windows security note -->
-    <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
-      <div class="flex items-start gap-2">
-        <i data-lucide="shield-alert" class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5"></i>
-        <div class="text-xs text-amber-700 leading-relaxed">
-          <strong>Windows 安全提示：</strong>首次运行可能会被 Windows Defender 或防火墙拦截。请在弹窗中选择"仍要运行"，或右键点击 WinWork.exe → 属性 → 解除锁定。了解更多：
-          <a href="https://github.com/wbyanclaw/winwork/releases/latest" target="_blank" class="underline ml-1">github.com/wbyanclaw/winwork</a>
-        </div>
-      </div>
-    </div>
+    <!-- Windows security note (tiny, below button) -->
+    <p class="text-[11px] text-faint mb-4">
+      安装后 Windows Defender 若弹出警告，点击"仍要运行"即可
+    </p>
 
-    <button onclick="closeInstallModal()" id="startBtn" class="w-full bg-brand text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed" disabled>
-      等待环境就绪...
+    <!-- Enter button (enabled after install success) -->
+    <button onclick="enterMainUI()" id="btn-enter" class="w-full bg-emerald-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2" style="display:none">
+      <i data-lucide="arrow-right" class="w-4 h-4"></i>
+      开始使用 WinWork
     </button>
   </div>
 </div>
@@ -259,252 +240,109 @@
     // ── Environment Check ─────────────────────────────────────
     let envState = { windcli: null, llmwiki: null, rechecking: false };
 
+    // ── Environment Check ─────────────────────────────────────
+    let envState = { windcli: false, llmwiki: false };
+
     async function checkAllEnv() {
       const statusBar = document.getElementById('envStatusBar');
       const modal = document.getElementById('installModal');
 
-      // Check wind-cli
       try {
         const info = await invoke('check_windcli');
         envState.windcli = info.found === 'true';
-        renderModalItem('windcli', info.found === 'true');
-      } catch(e) {
-        envState.windcli = false;
-        renderModalItem('windcli', false, '检查失败');
-      }
+      } catch(e) { envState.windcli = false; }
 
-      // Check llm-wiki
       try {
         const info = await invoke('check_llm_wiki');
         envState.llmwiki = info.found === 'true';
-        renderModalItem('llmwiki', info.found === 'true');
-      } catch(e) {
-        envState.llmwiki = false;
-        renderModalItem('llmwiki', false, '检查失败');
-      }
+      } catch(e) { envState.llmwiki = false; }
 
-      // Update title bar status
       const allReady = envState.windcli && envState.llmwiki;
+
       if (allReady) {
-        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪</span>`;
-      } else if (envState.windcli) {
-        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>wind-cli 已就绪，等待初始化</span>`;
-      } else {
-        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-slate-50 border border-border text-slate-500 text-[11px] px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>未安装</span>`;
-      }
-
-      // Show/hide modal
-      if (!envState.windcli || !envState.llmwiki) {
-        modal.classList.remove('hidden');
-      } else {
+        statusBar.innerHTML = '<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪</span>';
         modal.classList.add('hidden');
+      } else {
+        statusBar.innerHTML = '<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>未就绪</span>';
+        modal.classList.remove('hidden');
+        updateModalStatus();
       }
-
-      updateStartBtn();
-      lucide.createIcons();
+      return allReady;
     }
 
-    async function openDownload(url) {
-      try {
-        // Use Tauri Rust command (preferred — works even without @tauri-apps/api)
-        await invoke('open_url', { url });
-      } catch(e) {
-        // Fallback: window.open
-        window.open(url, '_blank');
+    function updateModalStatus() {
+      const statusEl = document.getElementById('modal-status');
+      if (!statusEl) return;
+      const btn = document.getElementById('btn-install');
+      const enterBtn = document.getElementById('btn-enter');
+      if (envState.windcli && envState.llmwiki) {
+        statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-emerald-600 font-medium">环境就绪，可以开始了</span>';
+        if (btn) btn.style.display = 'none';
+        if (enterBtn) enterBtn.style.display = 'flex';
+      } else if (!envState.windcli) {
+        statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span>等待安装 wind-cli';
+      } else {
+        statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span>等待 llm-wiki 初始化';
       }
     }
 
     async function doInstall() {
       const btn = document.getElementById('btn-install');
-      if (!btn) return;
+      const btnText = document.getElementById('btn-install-text');
+      const statusEl = document.getElementById('modal-status');
+      if (!btn || !statusEl) return;
       btn.disabled = true;
-      btn.innerHTML = '<span class="thinking-dots inline-flex gap-0.5"><span></span><span></span><span></span></span> 正在安装...';
-
+      if (btnText) btnText.textContent = '正在下载安装...';
+      statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span class="text-amber-600">正在下载 wind-cli 安装包...</span>';
       try {
         const result = await invoke('trigger_install');
         if (result.ok) {
-          // Installation succeeded — recheck status
-          btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> 安装完成，正在检测...';
-          lucide.createIcons();
-          await new Promise(r => setTimeout(r, 1500));
-          await recheckAll();
+          if (btnText) btnText.textContent = '安装中...';
+          statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span class="text-amber-600">安装完成，正在检测...</span>';
+          await pollForInstall();
         } else {
-          // Installation failed — show error and offer fallback
-          btn.innerHTML = '<i data-lucide="download-cloud" class="w-4 h-4"></i> 安装失败，请手动下载';
-          btn.disabled = false;
-          btn.className = 'w-full bg-slate-400 text-white rounded-lg py-2.5 text-sm font-medium';
-          lucide.createIcons();
-          // Offer manual download as fallback
-          const statusEl = document.getElementById('modal-windcli-status');
-          const actionEl = document.getElementById('modal-windcli-action');
-          if (statusEl) {
-            statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium';
-            statusEl.textContent = '⚠ 请手动下载';
-          }
-          if (actionEl) {
-            actionEl.innerHTML = `
-              <div class="space-y-2">
-                <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe')" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors">
-                  手动下载 windcli.exe
-                </button>
-                <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
-                  <div class="text-[11px] text-slate-500 mb-1">下载后双击运行安装，再检测：</div>
-                  <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
-                </div>
-              </div>`;
-            lucide.createIcons();
-          }
+          showInstallError(result.stderr || '安装失败，请手动下载');
         }
       } catch(e) {
-        // Invoke failed — fallback to manual download
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="download-cloud" class="w-4 h-4"></i> 安装不可用，请手动下载';
-        btn.className = 'w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium';
-        lucide.createIcons();
-        await new Promise(r => setTimeout(r, 100));
-        openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe');
+        showInstallError('无法执行安装，请手动下载');
       }
     }
 
-    function renderModalItem(which, found, msg) {
-      const statusEl = document.getElementById(`modal-${which}-status`);
-      const actionEl = document.getElementById(`modal-${which}-action`);
-
-      if (found) {
-        statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-medium';
-        statusEl.textContent = '✓ 已安装';
-        if (which === 'windcli') {
-          actionEl.innerHTML = `<button onclick="recheckAll()" class="text-xs text-slate-400 hover:text-brand transition-colors">点击重新检测 →</button>`;
-        } else {
-          actionEl.innerHTML = `<button onclick="recheckAll()" class="text-xs text-slate-400 hover:text-brand transition-colors">点击重新检测 →</button>`;
+    async function pollForInstall() {
+      const btn = document.getElementById('btn-install');
+      const statusEl = document.getElementById('modal-status');
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const ready = await checkAllEnv();
+        if (ready) {
+          if (btn) btn.style.display = 'none';
+          if (statusEl) statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-emerald-600 font-medium">安装成功！</span>';
+          const enterBtn = document.getElementById('btn-enter');
+          if (enterBtn) enterBtn.style.display = 'flex';
+          lucide.createIcons();
+          return;
         }
-      } else if (which === 'windcli') {
-        statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-500 font-medium';
-        statusEl.textContent = '✗ 未安装';
-        const isWin = navigator.platform.includes('Win') || /Win/.test(navigator.userAgent);
-        if (isWin) {
-          actionEl.innerHTML = `
-            <div class="space-y-2">
-              <button onclick="doInstall()" id="btn-install" class="w-full bg-emerald-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-                <i data-lucide="download-cloud" class="w-4 h-4"></i>一键安装 wind-cli（推荐）
-              </button>
-              <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
-                <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>
-                <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
-              </div>
-            </div>`;
-        } else {
-          actionEl.innerHTML = `
-            <div class="space-y-2">
-              <button onclick="doInstall()" id="btn-install" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-                <i data-lucide="download-cloud" class="w-4 h-4"></i>一键安装 wind-cli
-              </button>
-              <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
-                <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>
-                <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
-              </div>
-            </div>`;
-        }
-      } else {
-        statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500';
-        statusEl.textContent = msg || '⚠ 需先安装 wind-cli';
-        actionEl.innerHTML = `<div class="text-xs text-slate-400">安装 wind-cli 后即可使用</div>`;
       }
+      showInstallError('安装超时，请手动下载 wind-cli 后双击运行');
     }
 
-    async function recheckAll() {
-      if (envState.rechecking) return;
-      envState.rechecking = true;
-      const btn = document.getElementById('recheckBtn');
-      if (btn) { btn.disabled = true; btn.textContent = '检测中...'; }
-      await checkAllEnv();
-      if (btn) { btn.disabled = false; btn.textContent = '🔄 重新检测'; }
-      envState.rechecking = false;
-    }
-
-    function updateStartBtn() {
-      const btn = document.getElementById('startBtn');
-      if (!btn) return;
-      const ready = envState.windcli && envState.llmwiki;
-      btn.disabled = !ready;
-      if (ready) {
-        btn.textContent = '开始使用 WinWork →';
-        btn.className = 'w-full bg-brand text-white rounded-xl py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors cursor-pointer';
-      } else {
-        btn.textContent = '请先安装 wind-cli 后点击上方「检测安装结果」';
-        btn.className = 'w-full bg-slate-200 text-slate-500 rounded-xl py-2.5 text-sm cursor-not-allowed';
-      }
-    }
-
-    function closeInstallModal() {
-      if (envState.windcli && envState.llmwiki) {
-        document.getElementById('installModal').classList.add('hidden');
-      }
-    }
-
-    async function loadFileTree() {
-      const el = document.getElementById('treeLoading');
-      const tree = document.getElementById('fileTree');
-      try {
-        const result = await invoke('run_wind_command', { args: 'ls --json' });
-        if (result.ok && result.data) {
-          const entries = result.data.entries || [];
-          el?.remove();
-          renderFileTree(entries, tree);
-        }
-      } catch (e) {
-        el.textContent = '无法加载文件';
-      }
-    }
-
-    function renderFileTree(entries, container) {
-      // Remove loading
-      const loading = container.querySelector('#treeLoading');
-      if (loading) loading.remove();
-
-      // Add divider + wiki section
-      const divider = document.createElement('div');
-      divider.className = 'mx-4 my-2 border-t border-border';
-      container.appendChild(divider);
-
-      const wikiLabel = document.createElement('div');
-      wikiLabel.className = 'px-3 pb-1';
-      wikiLabel.innerHTML = '<span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span>';
-      container.appendChild(wikiLabel);
-
-      // workspace/ node
-      const wsNode = document.createElement('div');
-      wsNode.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2';
-      wsNode.innerHTML = '<i data-lucide="folder" class="w-4 h-4 text-amber-500" style="stroke-width:1.5"></i>workspace/';
-      container.appendChild(wsNode);
-
-      entries.forEach(entry => {
-        const item = document.createElement('div');
-        item.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-muted flex items-center gap-2 hover:bg-slate-50';
-        item.onclick = () => highlightTreeItem(item);
-        const icon = entry.kind === 'dir' ? 'folder' : 'file-text';
-        const color = entry.kind === 'dir' ? 'text-amber-400' : 'text-slate-400';
-        item.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 ${color}" style="stroke-width:1.5"></i><span class="flex-1 truncate">${escHtml(entry.name)}</span><span class="text-[10px] text-faint">${entry.size ? Math.round(entry.size) + 'B' : ''}</span>`;
-        container.appendChild(item);
-      });
-
-      // wiki/ node
-      const wikiNode = document.createElement('div');
-      wikiNode.className = 'tree-item px-4 py-1.5 cursor-pointer rounded-lg mx-2 text-sm text-ink font-medium flex items-center gap-2';
-      wikiNode.innerHTML = '<i data-lucide="book-open" class="w-4 h-4 text-brand" style="stroke-width:1.5"></i>wiki/';
-      container.appendChild(wikiNode);
-
-      const wikiEmpty = document.createElement('div');
-      wikiEmpty.className = 'tree-item px-4 py-1.5 rounded-lg mx-2 text-sm text-faint flex items-center gap-2';
-      wikiEmpty.innerHTML = '<i data-lucide="file-text" class="w-4 h-4 text-slate-300" style="stroke-width:1.5"></i><span class="flex-1 truncate italic">暂无知识条目</span>';
-      container.appendChild(wikiEmpty);
-
+    function showInstallError(msg) {
+      const btn = document.getElementById('btn-install');
+      const btnText = document.getElementById('btn-install-text');
+      const statusEl = document.getElementById('modal-status');
+      if (btn) { btn.disabled = false; if (btnText) btnText.textContent = '重新安装 wind-cli'; }
+      if (statusEl) statusEl.innerHTML = '<span class="text-red-500 text-sm">! ' + msg + '</span> <button onclick="openDownload(\'https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe\')" class="ml-2 text-xs text-brand underline">手动下载</button>';
       lucide.createIcons();
     }
 
-    function highlightTreeItem(el) {
-      document.querySelectorAll('.tree-item').forEach(i => i.classList.remove('active'));
-      el.classList.add('active');
+    async function openDownload(url) {
+      try { await invoke('open_url', { url }); }
+      catch(e) { window.open(url, '_blank'); }
+    }
+
+    function enterMainUI() {
+      document.getElementById('installModal').classList.add('hidden');
+      loadFileTree();
     }
 
     // ── Helpers ─────────────────────────────────────────────
