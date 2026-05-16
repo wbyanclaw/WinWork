@@ -115,6 +115,11 @@
       <span id="modal-btn-text">⚡ 一键安装 wind-cli</span>
     </button>
 
+    <!-- Skip button (always visible as fallback) -->
+    <button onclick="skipAndContinue()" id="skip-btn" class="mt-3 w-full px-4 py-2 text-sm text-muted hover:text-brand border border-border rounded-xl hover:bg-slate-50 transition-colors">
+      跳过 wind-cli，直接进入（部分功能不可用）
+    </button>
+
     <!-- Windows security note (tiny, below button) -->
     <p class="text-[11px] text-faint mt-4">
       安装后若弹出安全警告，点击"仍要运行"即可
@@ -430,34 +435,41 @@
 
     async function pollForInstall() {
       const btnText = document.getElementById('modal-btn-text');
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        await checkAllEnv();
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        // Only check wind-cli, NOT llm-wiki (avoids PowerShell flicker on Windows)
+        try {
+          const info = await invoke('check_windcli');
+          envState.windcli = info.found === 'true';
+        } catch(e) { envState.windcli = false; }
         if (envState.windcli) {
           updateModalUI();
           enterMainUI();
           return;
         }
       }
-      if (btnText) btnText.textContent = '安装超时，请在浏览器下载 wind-cli 后点击重试';
+      if (btnText) btnText.textContent = '安装超时，请在浏览器下载 wind-cli 后点击上方按钮重试';
       const btn = document.getElementById('modal-main-btn');
       if (btn) {
         btn.disabled = false;
-        btn.onclick = async () => {
-          await checkAllEnv();
-          if (envState.windcli) {
-            updateModalUI();
-            enterMainUI();
-          } else {
-            await handleModalButton();
-          }
-        };
+        btn.onclick = handleModalButton;
       }
+    }
+
+    function skipAndContinue() {
+      enterMainUI();
     }
 
     function enterMainUI() {
       document.getElementById('installModal').classList.add('hidden');
     }
+
+    // ESC to close modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.getElementById('installModal').classList.add('hidden');
+      }
+    });
 
     // ── Helpers ─────────────────────────────────────────────
     function escHtml(s) {
