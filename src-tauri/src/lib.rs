@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::{Command, Stdio};
+use std::process::{Command as StdCommand, Stdio};
 use tauri_plugin_opener::open_url as opener_open_url;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,7 +42,7 @@ fn get_windcli_path() -> String {
 
 fn run_wind(args: &[&str]) -> WindResult {
     let wind_path = get_windcli_path();
-    let output = Command::new(&wind_path)
+    let output = StdCommand::new(&wind_path)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -199,7 +199,7 @@ fn check_windcli() -> HashMap<String, String> {
 #[tauri::command]
 fn check_llm_wiki() -> HashMap<String, String> {
     let mut result = HashMap::new();
-    let out = Command::new(get_windcli_path())
+    let out = StdCommand::new(get_windcli_path())
         .args(["wiki", "status"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -242,7 +242,7 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Trigger wind-cli install via PowerShell one-liner
+/// Trigger wind-cli install — actually executes the install script
 #[tauri::command]
 fn trigger_install() -> WindResult {
     let install_script = if cfg!(target_os = "windows") {
@@ -251,12 +251,53 @@ fn trigger_install() -> WindResult {
         "curl -sSL https://raw.githubusercontent.com/wbyanclaw/wind-cli/main/install.sh | sh"
     };
 
-    WindResult {
-        ok: true,
-        stdout: install_script.to_string(),
-        stderr: String::new(),
-        exit_code: 0,
-        data: None,
+    let output = if cfg!(target_os = "windows") {
+        StdCommand::new("powershell")
+            .args(["-ExecutionPolicy", "Bypass", "-Command", install_script])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+    } else {
+        StdCommand::new("sh")
+            .arg("-c")
+            .arg(install_script)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+    };
+
+    match output {
+        Ok(mut child) => {
+            let stdout = child.stdout.take().map(|mut s| {
+                let mut buf = String::new();
+                std::io::Read::read_to_string(&mut s, &mut buf).ok();
+                buf
+            }).unwrap_or_default();
+            let stderr = child.stderr.take().map(|mut s| {
+                let mut buf = String::new();
+                std::io::Read::read_to_string(&mut s, &mut buf).ok();
+                buf
+            }).unwrap_or_default();
+
+            // Wait for install to complete
+            let status = child.wait();
+            let exit_code = status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+
+            WindResult {
+                ok: exit_code == 0,
+                stdout,
+                stderr,
+                exit_code,
+                data: None,
+            }
+        }
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("Failed to start install: {}", e),
+            exit_code: -1,
+            data: None,
+        },
     }
 }
 

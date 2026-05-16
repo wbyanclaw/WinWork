@@ -314,6 +314,58 @@
       }
     }
 
+    async function doInstall() {
+      const btn = document.getElementById('btn-install');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="thinking-dots inline-flex gap-0.5"><span></span><span></span><span></span></span> 正在安装...';
+
+      try {
+        const result = await invoke('trigger_install');
+        if (result.ok) {
+          // Installation succeeded — recheck status
+          btn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i> 安装完成，正在检测...';
+          lucide.createIcons();
+          await new Promise(r => setTimeout(r, 1500));
+          await recheckAll();
+        } else {
+          // Installation failed — show error and offer fallback
+          btn.innerHTML = '<i data-lucide="download-cloud" class="w-4 h-4"></i> 安装失败，请手动下载';
+          btn.disabled = false;
+          btn.className = 'w-full bg-slate-400 text-white rounded-lg py-2.5 text-sm font-medium';
+          lucide.createIcons();
+          // Offer manual download as fallback
+          const statusEl = document.getElementById('modal-windcli-status');
+          const actionEl = document.getElementById('modal-windcli-action');
+          if (statusEl) {
+            statusEl.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium';
+            statusEl.textContent = '⚠ 请手动下载';
+          }
+          if (actionEl) {
+            actionEl.innerHTML = `
+              <div class="space-y-2">
+                <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe')" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors">
+                  手动下载 windcli.exe
+                </button>
+                <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
+                  <div class="text-[11px] text-slate-500 mb-1">下载后双击运行安装，再检测：</div>
+                  <button onclick="recheckAll()" class="text-xs text-brand hover:underline font-medium">🔄 检测安装结果</button>
+                </div>
+              </div>`;
+            lucide.createIcons();
+          }
+        }
+      } catch(e) {
+        // Invoke failed — fallback to manual download
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="download-cloud" class="w-4 h-4"></i> 安装不可用，请手动下载';
+        btn.className = 'w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium';
+        lucide.createIcons();
+        await new Promise(r => setTimeout(r, 100));
+        openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe');
+      }
+    }
+
     function renderModalItem(which, found, msg) {
       const statusEl = document.getElementById(`modal-${which}-status`);
       const actionEl = document.getElementById(`modal-${which}-action`);
@@ -333,11 +385,8 @@
         if (isWin) {
           actionEl.innerHTML = `
             <div class="space-y-2">
-              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/download/v0.2.1/windcli.exe')" class="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-                <i data-lucide="download" class="w-4 h-4"></i>下载 windcli.exe（Windows x64）
-              </button>
-              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/latest')" class="w-full bg-slate-100 text-slate-600 rounded-lg py-1.5 text-xs hover:bg-slate-200 transition-colors">
-                更多下载选项（install.ps1 / ZIP）
+              <button onclick="doInstall()" id="btn-install" class="w-full bg-emerald-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="download-cloud" class="w-4 h-4"></i>一键安装 wind-cli（推荐）
               </button>
               <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
                 <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>
@@ -347,8 +396,8 @@
         } else {
           actionEl.innerHTML = `
             <div class="space-y-2">
-              <button onclick="openDownload('https://github.com/wbyanclaw/wind-cli/releases/latest')" class="w-full bg-brand text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-                <i data-lucide="download" class="w-4 h-4"></i>打开 wind-cli 下载页面
+              <button onclick="doInstall()" id="btn-install" class="w-full bg-brand text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                <i data-lucide="download-cloud" class="w-4 h-4"></i>一键安装 wind-cli
               </button>
               <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
                 <div class="text-[11px] text-slate-500 mb-1">安装后点击检测：</div>

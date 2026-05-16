@@ -5,6 +5,27 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "run-powershell-install",
+          "cmd": "powershell",
+          "args": ["-ExecutionPolicy", "Bypass", "-Command", { "validator": "\\S+" }]
+        },
+        {
+          "name": "run-bash-install",
+          "cmd": "bash",
+          "args": ["-c", { "validator": "\\S+" }]
+        },
+        {
+          "name": "run-sh-install",
+          "cmd": "sh",
+          "args": ["-c", { "validator": "\\S+" }]
+        }
+      ]
+    }
   ]
 }
