@@ -240,24 +240,89 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Install wind-cli: open releases page in browser, return immediately so frontend can poll
+/// Install wind-cli: download from GitHub releases and install to local app data
 #[tauri::command]
-fn trigger_install() -> WindResult {
-    let releases_url = "https://github.com/wbyanclaw/wind-cli/releases";
-    // Open releases page — user downloads and installs wind-cli manually
-    match opener_open_url(releases_url, None::<&str>) {
-        Ok(_) => WindResult {
-            ok: true,
-            stdout: "已在浏览器中打开 wind-cli 下载页面，请在页面下载对应平台的 wind-cli，安装后重启本应用。".to_string(),
-            stderr: String::new(),
-            exit_code: 0,
+async fn trigger_install() -> WindResult {
+    use std::process::Command as StdCommand;
+
+    // Detect OS and set download URL and destination path
+    let (download_url, dest_path) = if cfg!(target_os = "windows") {
+        let app_data = std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("APPDATA"))
+            .unwrap_or_else(|_| ".".to_string());
+        let install_dir = format!("{}\\winwork\\wind-cli", app_data);
+        let dest = format!("{}\\windcli.exe", install_dir);
+        (
+            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli.exe".to_string(),
+            dest,
+        )
+    } else {
+        // macOS / Linux
+        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let install_dir = format!("{}/.local/bin", home);
+        let dest = format!("{}/windcli", install_dir);
+        let url = if cfg!(target_os = "macos") {
+            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string()
+        } else {
+            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string()
+        };
+        (url, dest)
+    };
+
+    // Create install directory
+    let install_dir = std::path::Path::new(&dest_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| std::env::temp_dir());
+    if let Err(e) = std::fs::create_dir_all(&install_dir) {
+        return WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("无法创建安装目录: {}", e),
+            exit_code: 1,
+            data: None,
+        };
+    }
+
+    // Download binary via curl
+    let output = StdCommand::new("curl")
+        .args(["-L", "-o", &dest_path, &download_url])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            // Make executable on Unix
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&dest_path, PermissionsExt::from_mode(0o755));
+            }
+            WindResult {
+                ok: true,
+                stdout: format!(
+                    "wind-cli 安装成功: {}\n请重启 winwork 应用",
+                    dest_path
+                ),
+                stderr: String::new(),
+                exit_code: 0,
+                data: None,
+            }
+        }
+        Ok(out) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!(
+                "下载失败: {}",
+                String::from_utf8_lossy(&out.stderr)
+            ),
+            exit_code: 1,
             data: None,
         },
         Err(e) => WindResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("无法打开下载页面: {}", e),
-            exit_code: -1,
+            stderr: format!("无法执行 curl: {}\n请确保已安装 curl", e),
+            exit_code: 1,
             data: None,
         },
     }
