@@ -338,7 +338,7 @@ async fn trigger_install() -> WindResult {
     let install_dir = std::path::Path::new(&dest_path)
         .parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::temp_dir());
+        .unwrap_or_else(std::env::temp_dir);
     if let Err(e) = std::fs::create_dir_all(&install_dir) {
         return WindResult {
             ok: false,

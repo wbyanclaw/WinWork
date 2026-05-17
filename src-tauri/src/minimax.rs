@@ -39,18 +39,18 @@ impl MiniMaxClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| MiniMaxError::NetworkError(e.to_string()))?;
+            .map_err(|e| MiniMaxError::Network(e.to_string()))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(MiniMaxError::ApiError(status.as_u16(), error_text));
+            return Err(MiniMaxError::Api(status.as_u16(), error_text));
         }
 
         response
             .json::<ChatResponse>()
             .await
-            .map_err(|e| MiniMaxError::ParseError(e.to_string()))
+            .map_err(|e| MiniMaxError::Parse(e.to_string()))
     }
 }
 
@@ -89,17 +89,17 @@ pub struct ResponseMessage {
 
 #[derive(Debug)]
 pub enum MiniMaxError {
-    NetworkError(String),
-    ApiError(u16, String),
-    ParseError(String),
+    Network(String),
+    Api(u16, String),
+    Parse(String),
 }
 
 impl std::fmt::Display for MiniMaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MiniMaxError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            MiniMaxError::ApiError(status, msg) => write!(f, "API error {}: {}", status, msg),
-            MiniMaxError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            MiniMaxError::Network(msg) => write!(f, "Network error: {}", msg),
+            MiniMaxError::Api(status, msg) => write!(f, "API error {}: {}", status, msg),
+            MiniMaxError::Parse(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
