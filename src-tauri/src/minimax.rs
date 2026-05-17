@@ -1,6 +1,5 @@
-//! MiniMax API client for AI chat
-//!
-//! MiniMax API compatible with Anthropic messages API format.
+//! Generic OpenAI-compatible API client for AI chat.
+//! Supports any provider (MiniMax, OpenAI, Ollama, etc.) via base_url + model.
 
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +13,17 @@ pub struct MiniMaxClient {
 }
 
 impl MiniMaxClient {
-    pub fn new(api_key: String, model: Option<String>) -> Self {
+    /// Create a new client.
+    /// `base_url`: OpenAI-compatible endpoint base (e.g. "https://api.openai.com/v1" or MiniMax endpoint).
+    /// `api_key`: API key for authentication.
+    /// `model`: Model name to use (e.g. "gpt-4", "MiniMax-M2.7-highspeed").
+    pub fn new(api_key: String, base_url: String, model: Option<String>) -> Self {
         Self {
-            base_url: DEFAULT_BASE_URL.to_string(),
+            base_url: if base_url.is_empty() {
+                DEFAULT_BASE_URL.to_string()
+            } else {
+                base_url.trim_end_matches('/').to_string()
+            },
             api_key,
             model: model.unwrap_or_else(|| "MiniMax-M2.7-highspeed".to_string()),
         }

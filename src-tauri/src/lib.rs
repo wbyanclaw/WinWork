@@ -244,10 +244,11 @@ fn init_demo_workspace() -> WindResult {
 }
 
 /// List directory listing (JSON format)
+/// Note: --json is a GLOBAL flag, must come before the subcommand (not after).
 #[tauri::command]
 fn list_workspace() -> WindResult {
     let workspace = get_workspace_path();
-    run_wind(&["ls", "--json", &workspace])
+    run_wind(&["--json", "ls", &workspace])
 }
 
 /// Check if wind-cli is installed
@@ -455,16 +456,16 @@ async fn trigger_install() -> WindResult {
     }
 }
 
-/// Get wiki status via `wind wiki status`
+/// Get wiki status via `wind --json wiki status`
 #[tauri::command]
 fn wiki_status() -> WindResult {
-    run_wind(&["wiki", "status"])
+    run_wind(&["--json", "wiki", "status"])
 }
 
-/// Get wiki lint results via `wind wiki lint`
+/// Get wiki lint results via `wind --json wiki lint`
 #[tauri::command]
 fn wiki_lint() -> WindResult {
-    run_wind(&["wiki", "lint"])
+    run_wind(&["--json", "wiki", "lint"])
 }
 
 /// Create a directory via `wind mkdir <path>` with typed parameter (no regex parsing).
@@ -479,19 +480,19 @@ fn wft_open(file: String) -> WindResult {
     run_wind(&["wft", "file", &file])
 }
 
-/// Ingest a file into the wiki via `wind wiki ingest <path>`
+/// Ingest a file into the wiki via `wind --json wiki ingest <path>`
 #[tauri::command]
 fn wiki_ingest(path: String) -> WindResult {
-    run_wind(&["wiki", "ingest", &path])
+    run_wind(&["--json", "wiki", "ingest", &path])
 }
 
-/// Query the wiki via `wind wiki query <question>`
+/// Query the wiki via `wind --json wiki query <question>`
 #[tauri::command]
 fn wiki_query(question: String) -> WindResult {
-    run_wind(&["wiki", "query", &question])
+    run_wind(&["--json", "wiki", "query", &question])
 }
 
-/// Read a file from workspace via `wind read <path>`
+/// Read a file from workspace via `wind --json read <path>`
 /// Handles both absolute paths and workspace-relative paths.
 #[tauri::command]
 fn read_file(path: String) -> WindResult {
@@ -503,7 +504,7 @@ fn read_file(path: String) -> WindResult {
         let ws = workspace.trim_end_matches('/');
         format!("{}/{}", ws, path)
     };
-    run_wind(&["read", &full_path])
+    run_wind(&["--json", "read", &full_path])
 }
 
 /// Get the wiki directory path
@@ -516,10 +517,10 @@ fn get_wiki_dir() -> String {
     }
 }
 
-/// List wiki directory via `wind wiki status`
+/// List wiki directory via `wind --json wiki status`
 #[tauri::command]
 fn list_wiki() -> WindResult {
-    run_wind(&["wiki", "status"])
+    run_wind(&["--json", "wiki", "status"])
 }
 
 /// AI Chat result
@@ -576,9 +577,10 @@ Always wrap commands in [Executes: ...] format."#.to_string()
 async fn ai_chat(
     message: String,
     api_key: String,
+    base_url: Option<String>,
     model: Option<String>,
 ) -> Result<AiChatResult, String> {
-    let client = MiniMaxClient::new(api_key, model);
+    let client = MiniMaxClient::new(api_key, base_url.unwrap_or_default(), model);
     let workspace = get_workspace_path();
 
     let system_msg = format!(
