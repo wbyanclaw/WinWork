@@ -4,27 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>winwork</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Local CSS (no CDN dependency, works offline/China) -->
+  <link rel="stylesheet" href="styles.css">
   <script>
-<script>
-// Startup logger
-window._log = function() {
-  var args = Array.from(arguments);
-  var ts = new Date().toISOString().split('T')[1].slice(0,8);
-  console.log('[winwork ' + ts + ']', ...args);
-};
-window._log('SCRIPT: loaded');
-</script>
-
-// Lucide CDN loader with fallback
-(function() {
-  var script = document.createElement('script');
-  script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
-  script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded'); };
-  script.onerror = function() { window._lucideReady = false; window._log && window._log('LUCIDE: failed - using emoji fallback'); };
-  document.head.appendChild(script);
-})();
-</script>
+    window._log = function() {
+      var args = Array.from(arguments);
+      var ts = new Date().toISOString().split('T')[1].slice(0,8);
+      console.log('[winwork ' + ts + ']', ...args);
+    };
+    window._log('SCRIPT: loaded');
+  </script>
+  <script>
+    (function() {
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
+      script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded'); };
+      script.onerror = function() { window._lucideReady = false; window._log && window._log('LUCIDE: failed - using emoji fallback'); };
+      document.head.appendChild(script);
+    })();
+  </script>
   <script>
     tailwind.config = {
       theme: {
@@ -329,7 +327,7 @@ window._log('SCRIPT: loaded');
             const div = document.createElement('div');
             div.className = 'tree-item flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm text-slate-600';
             div.innerHTML = `
-              <i data-lucide="${entry.is_dir ? 'folder' : 'file'}" class="w-4 h-4 ${entry.is_dir ? 'text-amber-500' : 'text-slate-400'}" style="stroke-width:1.5"></span>
+              <span class="w-4 h-4 flex items-center justify-center">${entry.is_dir ? '📁' : '📄'}</span>
               <span class="truncate">${escHtml(entry.name)}</span>
             `;
             if (!entry.is_dir) {
@@ -1033,7 +1031,40 @@ window._log('SCRIPT: loaded');
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
       await checkAllEnv();
       await loadAppState();
+      await initWorkspace();
       await loadFileTree();
+      updateStatusBar('ready', '就绪');
+    }
+
+    // ── Workspace Initialization ─────────────────────────────
+    async function initWorkspace() {
+      try {
+        const result = await invoke('init_demo_workspace');
+        if (result && !result.ok) {
+          window._log && window._log('initWorkspace: wind init 失败', result.stderr);
+        } else {
+          window._log && window._log('initWorkspace: workspace 初始化成功');
+        }
+      } catch(e) {
+        window._log && window._log('initWorkspace: 异常', e);
+      }
+    }
+
+    // ── Status Bar Helper ────────────────────────────────────────
+    function updateStatusBar(state, message) {
+      const statusBar = document.getElementById('envStatusBar');
+      if (!statusBar) return;
+      window._log && window._log('状态:', state, message);
+      let colorClass = 'text-faint';
+      let bgClass = 'bg-slate-50';
+      let borderClass = 'border-border';
+      let dotColor = 'bg-slate-400';
+      switch(state) {
+        case 'loading': colorClass='text-amber-600'; bgClass='bg-amber-50'; borderClass='border-amber-200'; dotColor='bg-amber-400 pulse-dot'; break;
+        case 'ready': colorClass='text-emerald-600'; bgClass='bg-emerald-50'; borderClass='border-emerald-200'; dotColor='bg-emerald-500'; break;
+        case 'error': colorClass='text-red-600'; bgClass='bg-red-50'; borderClass='border-red-200'; dotColor='bg-red-500'; break;
+      }
+      statusBar.innerHTML = `<span class="flex items-center gap-1.5 ${bgClass} border ${borderClass} ${colorClass} text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>${escHtml(message)}</span>`;
     }
 
     // ── Start ─────────────────────────────────────────────────
