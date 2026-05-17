@@ -773,11 +773,11 @@
 
     function buildArgs(key, text) {
       switch (key) {
-        case 'ls': return ['ls', '--json'];
+        case 'ls': return ['--json', 'ls'];
         case 'write': return ['write', 'test.txt', '--stdin'];
-        case 'wiki_status': return ['wiki', 'status'];
-        case 'wiki_lint': return ['wiki', 'lint'];
-        default: return ['ls', '--json'];
+        case 'wiki_status': return ['--json', 'wiki', 'status'];
+        case 'wiki_lint': return ['--json', 'wiki', 'lint'];
+        default: return ['--json', 'ls'];
       }
     }
 
@@ -945,6 +945,10 @@
         );
         try {
           const result = await Promise.race([tauriInvoke(cmd, args), timeoutPromise]);
+          if (result === null || result === undefined) {
+            window._log && window._log(`invoke ${cmd} returned null`);
+            return { ok: false, stderr: `invoke null: ${cmd}`, stdout: '', exit_code: -1, data: null };
+          }
           if (result._timeout) {
             window._log && window._log(`invoke ${cmd} timed out after ${timeoutMs}ms`);
             return { ok: false, stderr: `invoke timeout: ${cmd} (>${timeoutMs}ms)`, stdout: '', exit_code: -1, data: null };
