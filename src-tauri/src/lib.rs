@@ -185,16 +185,20 @@ fn run_wind_command(args: Vec<String>) -> WindResult {
     let first_arg = args[0].to_lowercase();
     if first_arg == "ls" {
         let workspace = get_workspace_path();
+        // NOTE: --json is a GLOBAL flag, must come BEFORE the subcommand
         let mut ls_args: Vec<&str> = vec!["--json", "ls", &workspace];
         // Add remaining args
         for arg in args.iter().skip(1) {
             ls_args.push(arg);
         }
+        // DIAGNOSTIC: Log the actual command being executed
+        eprintln!("[DIAGNOSTIC] run_wind_command: wind {}", ls_args.join(" "));
         return run_wind(&ls_args);
     }
 
-    // Convert Vec<String> to Vec<&str> slices for run_wind
+    // DIAGNOSTIC: Log non-ls commands
     let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    eprintln!("[DIAGNOSTIC] run_wind_command: wind {}", parts.join(" "));
     run_wind(&parts)
 }
 
@@ -217,7 +221,14 @@ fn list_tools() -> Vec<WindTool> {
 /// Get wind-cli version
 #[tauri::command]
 fn get_version() -> WindResult {
+    eprintln!("[DIAGNOSTIC] get_version called");
     run_wind(&["--version"])
+}
+
+/// Get winwork app version
+#[tauri::command]
+fn get_winwork_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Get workspace path using proper directory structure:
@@ -242,12 +253,15 @@ fn get_workspace_path() -> String {
         if let Ok(content) = std::fs::read_to_string(&ws_path) {
             let path = std::path::PathBuf::from(content.trim());
             if path.exists() {
+                eprintln!("[DIAGNOSTIC] get_workspace_path: from winwork state={}", path.display());
                 return path.to_string_lossy().into_owned();
             }
         }
     }
     // Use proper directory structure: ~/.local/share/wind/workspace/
-    get_wind_root().join("workspace").to_string_lossy().into_owned()
+    let path = get_wind_root().join("workspace");
+    eprintln!("[DIAGNOSTIC] get_workspace_path: from wind_root={}", path.display());
+    path.to_string_lossy().into_owned()
 }
 
 /// Get wiki directory path
@@ -263,6 +277,9 @@ fn get_workspace_wiki_path() -> String {
 fn init_demo_workspace() -> WindResult {
     let workspace = get_workspace_path();
     let wiki = get_workspace_wiki_path();
+
+    // DIAGNOSTIC: Log the paths being used
+    eprintln!("[DIAGNOSTIC] init_demo_workspace: workspace={}, wiki={}", workspace, wiki);
 
     // Create workspace directory
     let _ = std::fs::create_dir_all(&workspace);
@@ -309,13 +326,18 @@ fn check_windcli() -> HashMap<String, String> {
     let mut result = HashMap::new();
     if let Some(path) = find_windcli() {
         result.insert("found".to_string(), "true".to_string());
-        result.insert("path".to_string(), path);
+        result.insert("path".to_string(), path.clone());
+        // DIAGNOSTIC: Also get version
+        let version_out = run_wind(&["--version"]);
+        result.insert("version".to_string(), if version_out.ok { version_out.stdout.trim().to_string() } else { "unknown".to_string() });
+        eprintln!("[DIAGNOSTIC] check_windcli: found '{}', version: {}", path, result.get("version").unwrap());
     } else {
         result.insert("found".to_string(), "false".to_string());
         result.insert(
             "install_url".to_string(),
             "https://github.com/wbyanclaw/wind-cli/releases/latest".to_string(),
         );
+        eprintln!("[DIAGNOSTIC] check_windcli: not found");
     }
     result
 }
@@ -839,6 +861,7 @@ pub fn run() {
             run_wind_command,
             list_tools,
             get_version,
+            get_winwork_version,
             get_workspace_path,
             get_workspace_wiki_path,
             init_demo_workspace,

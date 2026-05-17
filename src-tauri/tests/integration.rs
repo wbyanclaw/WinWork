@@ -79,7 +79,7 @@ fn test_ls_json_returns_valid_structure() {
     setup_workspace();
     let ws = workspace();
 
-    let out = wind_output(&["ls", "--json", &ws.to_string_lossy()]);
+    let out = wind_output(&["--json", "ls", &ws.to_string_lossy()]);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
     // Should be valid JSON
@@ -101,7 +101,7 @@ fn test_ls_json_entries_is_array() {
     setup_workspace();
     let ws = workspace();
 
-    let out = wind_output(&["ls", "--json", &ws.to_string_lossy()]);
+    let out = wind_output(&["--json", "ls", &ws.to_string_lossy()]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
 
@@ -123,7 +123,7 @@ fn test_ls_returns_entries_with_name_and_is_dir() {
     // Create a file
     std::fs::write(ws.join("file.txt"), "hello").unwrap();
 
-    let out = wind_output(&["ls", "--json", &ws.to_string_lossy()]);
+    let out = wind_output(&["--json", "ls", &ws.to_string_lossy()]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
 
