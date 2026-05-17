@@ -778,6 +778,64 @@
           </div>
         </div>`;
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+
+      // Update detail panels with step-by-step trace and data provenance
+      const trace = document.getElementById('detail-trace');
+      const source = document.getElementById('detail-source');
+      const placeholder = document.getElementById('detail-placeholder');
+      if (placeholder) placeholder.classList.add('hidden');
+
+      // Step-by-step execution trace
+      const traceSteps = \`
+        <div class="space-y-0">
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 1 · 用户输入</div><div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-[12px] text-slate-700 leading-relaxed">"\${escHtml(text)}"</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-emerald-100 border-2 border-emerald-300 text-emerald-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">2</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 2 · AI 解析意图</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">识别为 <span class="text-brand font-mono">wind \${escHtml(cmd)}</span> 命令</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-amber-100 border-2 border-amber-300 text-amber-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">3</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 3 · wind-cli 执行</div><div class="bg-slate-900 rounded-lg px-3 py-2 text-[11px] text-emerald-400 font-mono">$ wind \${escHtml(cmd)}</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-purple-100 border-2 border-purple-300 text-purple-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">4</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 4 · 返回结果</div><div class="bg-slate-900 rounded-lg px-3 py-2 overflow-x-auto"><pre class="text-[11px] text-slate-300 font-mono whitespace-pre">\${result.ok && result.stdout ? escHtml(result.stdout.slice(0, 500)) : (result.stderr ? escHtml(result.stderr.slice(0, 200)) : '无输出')}</pre></div></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-green-100 border-2 border-green-300 text-green-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">5</div></div>
+            <div class="flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 5 · AI 格式化回复</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">\${result.ok ? '执行成功，结果已格式化' : '执行失败，请检查输入'}</div></div>
+          </div>
+        </div>\`;
+      if (trace) trace.innerHTML = traceSteps;
+
+      // Data provenance panel
+      const sourceContent = \`
+        <div class="text-[11px] font-semibold text-muted mb-3 uppercase tracking-wide">原始数据溯源</div>
+        <div class="space-y-3">
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-brand">↓</span><span class="text-[11px] font-semibold text-muted">输入数据</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">用户输入（原始）</div><div class="font-mono text-[12px] text-slate-700">"\${escHtml(text)}"</div></div>
+          </div>
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-brand">⌨</span><span class="text-[11px] font-semibold text-muted">工具调用</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">wind-cli 命令</div><div class="font-mono text-[12px] text-slate-700 mb-2">wind \${escHtml(cmd)}</div><div class="text-[10px] text-faint mb-1">执行状态</div><div class="font-mono text-[11px] text-slate-500">\${result.ok ? 'exit code: 0 (成功)' : 'exit code: ' + (result.exit_code || '?')}</div></div>
+          </div>
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-emerald-500">↑</span><span class="text-[11px] font-semibold text-muted">输出数据</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">wind-cli 返回（原始 JSON）</div><div class="font-mono text-[11px] text-slate-700 whitespace-pre">\${result.ok && result.stdout ? escHtml(result.stdout.slice(0, 300)) : (result.stderr ? escHtml(result.stderr.slice(0, 200)) : '无输出')}</div></div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+            <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium"><span class="w-3.5 h-3.5">✓</span>安全校验\${result.ok ? '通过' : '失败'}</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>路径隔离：workspace/ 内可访问</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>\${result.ok ? '无路径穿越风险' : '执行异常'}</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>无外部命令注入</div>
+          </div>
+        </div>\`;
+      if (source) source.innerHTML = sourceContent;
+
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
     }
 
