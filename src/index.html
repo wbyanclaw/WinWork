@@ -54,11 +54,30 @@
     window._log('SCRIPT: loaded');
   </script>
   <script>
+    // ── Lucide icons with local fallback ─────────────────────────
     (function() {
+      // Try local first
+      try {
+        // Check if lucide is already loaded globally
+        if (typeof lucide !== 'undefined') {
+          window._lucideReady = true;
+          return;
+        }
+      } catch(e) {}
+
+      // Try loading from CDN, but don't block if it fails
       var script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
-      script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded'); };
-      script.onerror = function() { window._lucideReady = false; window._log && window._log('LUCIDE: failed - using emoji fallback'); };
+      script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded from CDN'); };
+      script.onerror = function() {
+        window._lucideReady = false;
+        window._log && window._log('LUCIDE: failed - using emoji fallback');
+        // Show modal icon buttons with emojis as fallback
+        var modalBtnIcon = document.getElementById('modal-btn-icon');
+        if (modalBtnIcon && !modalBtnIcon.textContent) {
+          modalBtnIcon.textContent = '⚡';
+        }
+      };
       document.head.appendChild(script);
     })();
   </script>
@@ -172,7 +191,7 @@
 
     <!-- Single button (changes based on state) -->
     <button onclick="handleModalButton()" id="modal-main-btn" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-      <span class="w-4 h-4">⚡</span></span>
+      <span id="modal-btn-icon"></span>
       <span id="modal-btn-text">⚡ 一键安装 wind-cli</span>
     </button>
 
@@ -469,21 +488,29 @@
       const btnIcon = document.getElementById('modal-btn-icon');
       if (!btn) return;
 
+      // Ensure icon span exists (defensive)
+      if (btnIcon) {
+        // Use Lucide if loaded, otherwise emoji fallback
+        if (window._lucideReady && window.lucide) {
+          btnIcon.textContent = '';
+          btnIcon.setAttribute('data-lucide', envState.windcli ? 'arrow-right' : 'zap');
+        } else {
+          btnIcon.textContent = envState.windcli ? '→' : '⚡';
+        }
+      }
+
       if (!envState.windcli) {
         // Wind-cli not installed: show install button
         btn.className = 'w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2';
-        btnText.textContent = '⚡ 一键安装 wind-cli';
-        btnIcon.setAttribute('data-lucide', 'zap');
+        if (btnText) btnText.textContent = '⚡ 一键安装 wind-cli';
       } else if (!envState.llmwiki) {
         // wind-cli installed but llm-wiki not ready: show "跳过并继续" button
         btn.className = 'w-full bg-amber-500 text-white rounded-xl py-3 text-sm font-semibold hover:bg-amber-600 transition-colors flex items-center justify-center gap-2';
-        btnText.textContent = '跳过并继续';
-        btnIcon.setAttribute('data-lucide', 'arrow-right');
+        if (btnText) btnText.textContent = '跳过并继续';
       } else {
         // All ready: show enter button
         btn.className = 'w-full bg-emerald-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2';
-        btnText.textContent = '开始使用 winwork';
-        btnIcon.setAttribute('data-lucide', 'arrow-right');
+        if (btnText) btnText.textContent = '开始使用 winwork';
       }
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
     }
@@ -624,6 +651,8 @@
         </div>`;
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
@@ -908,14 +937,21 @@
     // ── Tauri invoke wrapper with timeout ────────────────────────
     async function invoke(cmd, args = {}, timeoutMs = 10000) {
       if (typeof window.__TAURI__ !== 'undefined') {
-        const { invoke } = window.__TAURI__.core;
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`invoke timeout: ${cmd} (>${timeoutMs}ms)`)), timeoutMs)
+        const { invoke: tauriInvoke } = window.__TAURI__.core;
+        const timeoutPromise = new Promise((resolve) =>
+          setTimeout(() => resolve({ _timeout: true, cmd, timeoutMs }), timeoutMs)
         );
-        return await Promise.race([invoke(cmd, args), timeoutPromise]).catch(e => {
-          window._log && window._log(`invoke ${cmd} failed/timeout:`, e.message);
+        try {
+          const result = await Promise.race([tauriInvoke(cmd, args), timeoutPromise]);
+          if (result._timeout) {
+            window._log && window._log(`invoke ${cmd} timed out after ${timeoutMs}ms`);
+            return { ok: false, stderr: `invoke timeout: ${cmd} (>${timeoutMs}ms)`, stdout: '', exit_code: -1, data: null };
+          }
+          return result;
+        } catch(e) {
+          window._log && window._log(`invoke ${cmd} failed:`, e.message);
           throw e;
-        });
+        }
       } else {
         // Fallback: simulate for browser dev
         return { ok: true, data: { entries: [] }, stderr: '' };

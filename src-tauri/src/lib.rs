@@ -24,50 +24,75 @@ pub struct WindTool {
     pub risk_level: String,
 }
 
-/// Fast PATH lookup for windcli — no subprocess spawning, returns instantly
-/// Also checks the install paths used by trigger_install()
+/// Fast PATH lookup for wind-cli binary (named `wind` or `windcli` depending on install method).
+/// Also checks fallback install paths used by trigger_install().
 fn find_windcli() -> Option<String> {
-    // 1. Check PATH first
+    // 1. Check PATH for both possible names (windcli first, then wind)
     for name in &["windcli", "wind"] {
         if which(name).is_ok() {
             return Some(name.to_string());
         }
     }
 
-    // 2. Check install paths used by trigger_install()
+    // 2. Check install fallback paths (both windcli and wind names)
     #[cfg(target_os = "windows")]
     {
-        // Try LOCALAPPDATA\winwork\wind-cli\windcli.exe
+        // Try LOCALAPPDATA\winwork\wind-cli\ (backend install path)
         if let Some(appdata) = std::env::var_os("LOCALAPPDATA") {
-            let path = std::path::Path::new(&appdata)
-                .join("winwork")
-                .join("wind-cli")
-                .join("windcli.exe");
-            if path.exists() {
-                return Some(path.to_string_lossy().into_owned());
+            for exe in &["windcli.exe", "wind.exe"] {
+                let path = std::path::Path::new(&appdata)
+                    .join("winwork")
+                    .join("wind-cli")
+                    .join(exe);
+                if path.exists() {
+                    return Some(path.to_string_lossy().into_owned());
+                }
             }
         }
-        // Try APPDATA\winwork\wind-cli\windcli.exe (fallback on some Windows configs)
+        // Try APPDATA\winwork\wind-cli\ (fallback on some Windows configs)
         if let Some(appdata) = std::env::var_os("APPDATA") {
-            let path = std::path::Path::new(&appdata)
-                .join("winwork")
-                .join("wind-cli")
-                .join("windcli.exe");
-            if path.exists() {
-                return Some(path.to_string_lossy().into_owned());
+            for exe in &["windcli.exe", "wind.exe"] {
+                let path = std::path::Path::new(&appdata)
+                    .join("winwork")
+                    .join("wind-cli")
+                    .join(exe);
+                if path.exists() {
+                    return Some(path.to_string_lossy().into_owned());
+                }
+            }
+        }
+        // Try LOCALAPPDATA\wind-cli\ (install.ps1 path — add to PATH)
+        if let Some(appdata) = std::env::var_os("LOCALAPPDATA") {
+            for exe in &["windcli.exe", "wind.exe"] {
+                let path = std::path::Path::new(&appdata).join("wind-cli").join(exe);
+                if path.exists() {
+                    // Found at install.ps1 path — add dir to PATH for this session
+                    let dir = path.parent()?.to_path_buf();
+                    let current = std::env::var_os("PATH").unwrap_or_default();
+                    let new_path = format!(
+                        "{}{}{}",
+                        dir.to_string_lossy(),
+                        std::path::MAIN_SEPARATOR,
+                        current.to_string_lossy()
+                    );
+                    std::env::set_var("PATH", &new_path);
+                    return Some(path.to_string_lossy().into_owned());
+                }
             }
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // Check ~/.local/bin/windcli (used by trigger_install on Unix/macOS)
+        // Check ~/.local/bin/ (standard Unix install location)
         if let Some(home) = std::env::var_os("HOME") {
-            let path = std::path::Path::new(&home)
-                .join(".local")
-                .join("bin")
-                .join("windcli");
-            if path.exists() {
-                return Some(path.to_string_lossy().into_owned());
+            for name in &["windcli", "wind"] {
+                let path = std::path::Path::new(&home)
+                    .join(".local")
+                    .join("bin")
+                    .join(name);
+                if path.exists() {
+                    return Some(path.to_string_lossy().into_owned());
+                }
             }
         }
     }
@@ -82,47 +107,54 @@ fn get_windcli_path() -> String {
 fn run_wind(args: &[&str]) -> WindResult {
     let wind_path = get_windcli_path();
 
-    // Check if windcli exists before trying to run
-    if which(&wind_path).is_err() && wind_path != "windcli" {
-        // Try "windcli" as fallback
-        if which("windcli").is_err() {
-            return WindResult {
-                ok: false,
-                stdout: String::new(),
-                stderr: "windcli not found in PATH. Please install wind-cli first.".to_string(),
-                exit_code: -1,
-                data: None,
-            };
+    // Check if the resolved binary actually exists before trying to run
+    let exe_to_check = if std::path::Path::new(&wind_path).is_absolute() {
+        &wind_path
+    } else {
+        &wind_path
+    };
+    if which(exe_to_check).is_err() {
+        // Try "windcli" as fallback in PATH
+        if which("windcli").is_ok() {
+            // PATH has windcli — use it directly (let the OS resolve it)
+            let output = StdCommand::new("windcli")
+                .args(args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output();
+            return build_wind_result(output);
         }
+        return WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "windcli not found in PATH. Please install wind-cli first.".to_string(),
+            exit_code: -1,
+            data: None,
+        };
     }
 
-    // Use Command::current_dir to avoid hanging on certain systems
     let output = StdCommand::new(&wind_path)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output();
 
+    build_wind_result(output)
+}
+
+fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> WindResult {
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let exit_code = out.status.code().unwrap_or(-1);
-
             let ok = out.status.success();
             let data = if ok && !stdout.trim().is_empty() {
                 serde_json::from_str(&stdout).ok()
             } else {
                 None
             };
-
-            WindResult {
-                ok,
-                stdout,
-                stderr,
-                exit_code,
-                data,
-            }
+            WindResult { ok, stdout, stderr, exit_code, data }
         }
         Err(e) => WindResult {
             ok: false,
@@ -154,51 +186,15 @@ fn run_wind_command(args: String) -> WindResult {
 #[tauri::command]
 fn list_tools() -> Vec<WindTool> {
     vec![
-        WindTool {
-            name: "ls".to_string(),
-            description: "List directory contents".to_string(),
-            risk_level: "None".to_string(),
-        },
-        WindTool {
-            name: "read".to_string(),
-            description: "Read file (≤10MB)".to_string(),
-            risk_level: "Low".to_string(),
-        },
-        WindTool {
-            name: "write".to_string(),
-            description: "Write file via stdin".to_string(),
-            risk_level: "Medium".to_string(),
-        },
-        WindTool {
-            name: "mkdir".to_string(),
-            description: "Create directory".to_string(),
-            risk_level: "Medium".to_string(),
-        },
-        WindTool {
-            name: "rm".to_string(),
-            description: "Delete file or directory".to_string(),
-            risk_level: "High".to_string(),
-        },
-        WindTool {
-            name: "extract".to_string(),
-            description: "Parse document content".to_string(),
-            risk_level: "Low".to_string(),
-        },
-        WindTool {
-            name: "wft".to_string(),
-            description: "Dispatch windlocal action to WFT".to_string(),
-            risk_level: "None".to_string(),
-        },
-        WindTool {
-            name: "workspace_info".to_string(),
-            description: "Get current workspace root".to_string(),
-            risk_level: "None".to_string(),
-        },
-        WindTool {
-            name: "version_check".to_string(),
-            description: "Get version info".to_string(),
-            risk_level: "None".to_string(),
-        },
+        WindTool { name: "ls".to_string(), description: "List directory contents".to_string(), risk_level: "None".to_string() },
+        WindTool { name: "read".to_string(), description: "Read file (≤10MB)".to_string(), risk_level: "Low".to_string() },
+        WindTool { name: "write".to_string(), description: "Write file via stdin".to_string(), risk_level: "Medium".to_string() },
+        WindTool { name: "mkdir".to_string(), description: "Create directory".to_string(), risk_level: "Medium".to_string() },
+        WindTool { name: "rm".to_string(), description: "Delete file or directory".to_string(), risk_level: "High".to_string() },
+        WindTool { name: "extract".to_string(), description: "Parse document content".to_string(), risk_level: "Low".to_string() },
+        WindTool { name: "wft".to_string(), description: "Dispatch windlocal action to WFT".to_string(), risk_level: "None".to_string() },
+        WindTool { name: "workspace_info".to_string(), description: "Get current workspace root".to_string(), risk_level: "None".to_string() },
+        WindTool { name: "version_check".to_string(), description: "Get version info".to_string(), risk_level: "None".to_string() },
     ]
 }
 
@@ -208,29 +204,48 @@ fn get_version() -> WindResult {
     run_wind(&["--version"])
 }
 
-/// Get workspace path from config or temp
+/// Get workspace path from winwork state or temp fallback
 #[tauri::command]
 fn get_workspace_path() -> String {
-    // Use temp dir for demo workspace
+    // First try to load from winwork state
+    if let Ok(winwork_root) = winwork_root() {
+        let ws_path = winwork_root.join("current_workspace.txt");
+        if let Ok(content) = std::fs::read_to_string(&ws_path) {
+            let path = std::path::PathBuf::from(content.trim());
+            if path.exists() {
+                return path.to_string_lossy().into_owned();
+            }
+        }
+    }
+    // Fallback: use temp dir for demo workspace
     let temp = std::env::temp_dir();
-    let demo_dir = temp.join("wind-demo");
-    demo_dir.to_string_lossy().to_string()
+    temp.join("wind-demo").to_string_lossy().into_owned()
 }
 
 /// Initialize demo workspace
 #[tauri::command]
 fn init_demo_workspace() -> WindResult {
     let workspace = get_workspace_path();
-    // Create directory if needed
     let _ = std::fs::create_dir_all(&workspace);
+
+    // Save workspace path to winwork state so wind-cli uses it
+    if let Ok(winwork_root) = winwork_root() {
+        if let Some(parent) = winwork_root.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let ws_path = winwork_root.join("current_workspace.txt");
+        let _ = std::fs::write(&ws_path, &workspace);
+    }
+
+    // Initialize with wind-cli (this sets up wind config with the workspace root)
     run_wind(&["init", &workspace])
 }
 
-/// Get directory listing
+/// List directory listing (JSON format)
 #[tauri::command]
 fn list_workspace() -> WindResult {
     let workspace = get_workspace_path();
-    run_wind(&["ls", &workspace])
+    run_wind(&["ls", "--json", &workspace])
 }
 
 /// Check if wind-cli is installed
@@ -250,21 +265,39 @@ fn check_windcli() -> HashMap<String, String> {
     result
 }
 
-/// Check if llm-wiki (wind wiki) is installed
+/// Check if llm-wiki is available by running `wind wiki status`
 #[tauri::command]
 fn check_llm_wiki() -> HashMap<String, String> {
     let mut result = HashMap::new();
 
-    // First check if windcli is even findable
+    // First check if we can find wind-cli
     let windcli_path = get_windcli_path();
-    if which(&windcli_path).is_err() && windcli_path != "windcli" {
-        // windcli not in PATH and not at expected install location
-        result.insert("found".to_string(), "false".to_string());
-        result.insert("reason".to_string(), "windcli not found in PATH".to_string());
-        return result;
-    }
 
-    let out = StdCommand::new(&windcli_path)
+    // Try to find wind-cli (absolute path or bare name)
+    let found_path = if std::path::Path::new(&windcli_path).is_absolute() {
+        if std::path::Path::new(&windcli_path).exists() {
+            Some(windcli_path.clone())
+        } else {
+            None
+        }
+    } else {
+        // Try bare name in PATH
+        if which(&windcli_path).is_ok() {
+            Some(windcli_path)
+        } else if which("windcli").is_ok() {
+            Some("windcli".to_string())
+        } else {
+            None
+        }
+    };
+
+    let Some(windcli) = found_path else {
+        result.insert("found".to_string(), "false".to_string());
+        result.insert("reason".to_string(), "wind-cli not found".to_string());
+        return result;
+    };
+
+    let out = StdCommand::new(&windcli)
         .args(["wiki", "status"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -276,11 +309,15 @@ fn check_llm_wiki() -> HashMap<String, String> {
                 result.insert("found".to_string(), "true".to_string());
             } else {
                 result.insert("found".to_string(), "false".to_string());
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                if !stderr.is_empty() {
+                    result.insert("reason".to_string(), stderr.to_string());
+                }
             }
         }
         Err(e) => {
             result.insert("found".to_string(), "false".to_string());
-            result.insert("reason".to_string(), format!("windcli error: {}", e));
+            result.insert("reason".to_string(), format!("wind-cli error: {}", e));
         }
     }
     result
@@ -308,42 +345,50 @@ fn open_url(url: String) -> WindResult {
     }
 }
 
-/// Install wind-cli: download from GitHub releases and install to local app data
+/// Install wind-cli: download from GitHub releases to local install directory.
+/// On Windows, also updates the session PATH so the binary is found immediately.
 #[tauri::command]
 async fn trigger_install() -> WindResult {
     use std::process::Command as StdCommand;
 
-    // Detect OS and set download URL and destination path
-    let (download_url, dest_path) = if cfg!(target_os = "windows") {
-        let app_data = std::env::var("LOCALAPPDATA")
-            .or_else(|_| std::env::var("APPDATA"))
-            .unwrap_or_else(|_| ".".to_string());
-        let install_dir = std::path::Path::new(&app_data)
-            .join("winwork")
-            .join("wind-cli");
-        let dest = install_dir.join("windcli.exe");
+    #[cfg(target_os = "windows")]
+    let install_dir = std::path::PathBuf::from(
+        std::env::var("LOCALAPPDATA")
+            .unwrap_or_else(|_| std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string()))
+    )
+    .join("wind-cli");
+
+    #[cfg(not(target_os = "windows"))]
+    let install_dir = std::path::PathBuf::from(
+        std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
+    )
+    .join(".local")
+    .join("bin");
+
+    #[cfg(target_os = "windows")]
+    let (download_url, dest) = {
+        let exe = install_dir.join("windcli.exe");
         (
             "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli.exe".to_string(),
-            dest.to_string_lossy().into_owned(),
+            exe,
         )
-    } else {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let install_dir = std::path::Path::new(&home).join(".local").join("bin");
-        let dest = install_dir.join("windcli");
-        let url = "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string();
-        (url, dest.to_string_lossy().into_owned())
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let (download_url, dest) = {
+        let exe = install_dir.join("windcli");
+        (
+            "https://github.com/wbyanclaw/wind-cli/releases/latest/download/windcli".to_string(),
+            exe,
+        )
     };
 
     // Create install directory
-    let install_dir = std::path::Path::new(&dest_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(std::env::temp_dir);
     if let Err(e) = std::fs::create_dir_all(&install_dir) {
         return WindResult {
             ok: false,
             stdout: String::new(),
-            stderr: format!("无法创建安装目录: {}", e),
+            stderr: format!("无法创建安装目录: {}: {}", install_dir.display(), e),
             exit_code: 1,
             data: None,
         };
@@ -351,7 +396,7 @@ async fn trigger_install() -> WindResult {
 
     // Download binary via curl
     let output = StdCommand::new("curl")
-        .args(["-L", "-o", &dest_path, &download_url])
+        .args(["-L", "-o", &dest.to_string_lossy(), &download_url])
         .output();
 
     match output {
@@ -360,13 +405,27 @@ async fn trigger_install() -> WindResult {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&dest_path, PermissionsExt::from_mode(0o755));
+                let _ = std::fs::set_permissions(&dest, PermissionsExt::from_mode(0o755));
             }
+
+            // On Windows, add install dir to session PATH so it is found immediately
+            #[cfg(target_os = "windows")]
+            {
+                let current = std::env::var_os("PATH").unwrap_or_default();
+                let new_path = format!(
+                    "{}{}{}",
+                    install_dir.to_string_lossy(),
+                    std::path::MAIN_SEPARATOR,
+                    current.to_string_lossy()
+                );
+                std::env::set_var("PATH", &new_path);
+            }
+
             WindResult {
                 ok: true,
                 stdout: format!(
-                    "wind-cli 安装成功: {}\n请重启 winwork 应用",
-                    dest_path
+                    "wind-cli 安装成功: {}\n重启应用后即可使用",
+                    dest.to_string_lossy()
                 ),
                 stderr: String::new(),
                 exit_code: 0,
@@ -377,7 +436,8 @@ async fn trigger_install() -> WindResult {
             ok: false,
             stdout: String::new(),
             stderr: format!(
-                "下载失败: {}",
+                "下载失败 (curl exit {}): {}",
+                out.status,
                 String::from_utf8_lossy(&out.stderr)
             ),
             exit_code: 1,
@@ -418,16 +478,25 @@ fn wiki_query(question: String) -> WindResult {
 }
 
 /// Read a file from workspace via `wind read <path>`
+/// Handles both absolute paths and workspace-relative paths.
 #[tauri::command]
 fn read_file(path: String) -> WindResult {
-    run_wind(&["read", &path])
+    let full_path = if std::path::Path::new(&path).is_absolute() {
+        path
+    } else {
+        let workspace = get_workspace_path();
+        // Join workspace with relative path, handling trailing slashes
+        let ws = workspace.trim_end_matches('/');
+        format!("{}/{}", ws, path)
+    };
+    run_wind(&["read", &full_path])
 }
 
 /// Get the wiki directory path
 #[tauri::command]
 fn get_wiki_dir() -> String {
     if let Some(proj_dirs) = directories::ProjectDirs::from("com", "wind-cli", "wind") {
-        proj_dirs.data_dir().join("wiki").to_string_lossy().to_string()
+        proj_dirs.data_dir().join("wiki").to_string_lossy().into_owned()
     } else {
         "~/.local/share/wind/wiki".to_string()
     }
@@ -465,9 +534,9 @@ Available wind-cli commands:
 - version: Show wind-cli version
 - init <path>: Initialize workspace
 
-Workspace is isolated at ~/.local/share/wind/workspace/
+Workspace is isolated — use the current workspace path from context.
 
-When user asks to perform file operations, you should:
+When user asks to perform file operations:
 1. Execute the appropriate wind-cli command
 2. Report the result clearly in Chinese
 3. Be helpful and concise
@@ -476,7 +545,7 @@ Example interactions:
 User: 列出当前目录的文件
 You: I'll list the files in your workspace.
 
-[Executes: wind ls ~/.local/share/wind/workspace/]
+[Executes: wind ls <current_workspace>]
 Result: Shows the directory listing
 
 User: 创建一个新文件夹叫test
@@ -485,7 +554,7 @@ You: I'll create a directory called "test" for you.
 [Executes: wind mkdir test]
 Result: Directory created successfully
 
-Always wrap commands in [Executes: ...] format and results in [Result: ...] format."#.to_string()
+Always wrap commands in [Executes: ...] format."#.to_string()
 }
 
 /// AI Chat - understand user intent and execute wind-cli commands
@@ -496,10 +565,8 @@ async fn ai_chat(
     model: Option<String>,
 ) -> Result<AiChatResult, String> {
     let client = MiniMaxClient::new(api_key, model);
-
     let workspace = get_workspace_path();
 
-    // Build messages with system prompt
     let system_msg = format!(
         "{}\n\nCurrent workspace: {}",
         get_system_prompt(),
@@ -507,38 +574,26 @@ async fn ai_chat(
     );
 
     let messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: system_msg,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: message,
-        },
+        ChatMessage { role: "system".to_string(), content: system_msg },
+        ChatMessage { role: "user".to_string(), content: message },
     ];
 
-    // Call MiniMax API
     let response = client.chat(messages).await.map_err(|e| e.to_string())?;
 
-    // Extract response content
     let response_text = response
         .choices
         .first()
         .map(|c| c.message.content.clone())
         .unwrap_or_default();
 
-    // Parse and execute commands from response
     let mut commands_executed = Vec::new();
     let mut command_results = Vec::new();
 
-    // Extract commands from [Executes: ...] format
     for line in response_text.lines() {
         if line.trim().starts_with("[Executes:") {
             if let Some(cmd) = line.trim().strip_prefix("[Executes:") {
                 let cmd = cmd.trim_end_matches(']').trim();
                 commands_executed.push(cmd.to_string());
-
-                // Execute the command
                 let result = run_wind_command(cmd.to_string());
                 command_results.push(serde_json::json!({
                     "command": cmd,
@@ -561,7 +616,7 @@ async fn ai_chat(
     })
 }
 
-/// Get API config info (returns a placeholder - actual key should be stored securely)
+/// Get API config info
 #[tauri::command]
 fn get_api_config() -> serde_json::Value {
     serde_json::json!({
@@ -590,87 +645,71 @@ fn winwork_root() -> Result<std::path::PathBuf, String> {
         .ok_or_else(|| "Failed to resolve winwork data directory".to_string())
 }
 
-/// Resolve a path relative to the winwork root (e.g. "state.json" → ~/.winwork/state.json)
+/// Resolve a path relative to the winwork root
 fn winwork_path(relative: &str) -> Result<std::path::PathBuf, String> {
     Ok(winwork_root()?.join(relative))
 }
 
 /// Write JSON data to a file in the winwork directory.
-/// Errors are surfaced (never silently swallowed).
 #[tauri::command]
 fn save_state(relative_path: String, data: serde_json::Value) -> Result<(), String> {
     let path = winwork_path(&relative_path)?;
-
-    // Ensure parent directory exists
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create directory {}: {}", parent.display(), e))?;
     }
-
     let json = serde_json::to_string_pretty(&data)
         .map_err(|e| format!("Failed to serialize state: {}", e))?;
-
     std::fs::write(&path, json)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
-
     Ok(())
 }
 
 /// Read JSON data from a file in the winwork directory.
 /// Returns null JSON value if the file does not exist (not an error).
-/// Errors other than NotFound are surfaced.
 #[tauri::command]
 fn load_state(relative_path: String) -> Result<serde_json::Value, String> {
     let path = winwork_path(&relative_path)?;
-
     let json_str = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // File doesn't exist yet — return null, not an error
             return Ok(serde_json::Value::Null);
         }
         Err(e) => return Err(format!("Failed to read {}: {}", path.display(), e)),
     };
-
     serde_json::from_str(&json_str)
         .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
 }
 
 /// Ensure a workspace directory exists and return its path.
-/// Returns the workspace path as a string.
 #[tauri::command]
 fn ensure_workspace_dir(name: String) -> Result<String, String> {
     let path = winwork_path("workspaces")?.join(&name);
     std::fs::create_dir_all(&path)
         .map_err(|e| format!("Failed to create workspace '{}': {}", name, e))?;
-    Ok(path.to_string_lossy().to_string())
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// List all workspace names.
 #[tauri::command]
 fn list_workspaces() -> Result<Vec<String>, String> {
     let workspaces_path = winwork_path("workspaces")?;
-
     if !workspaces_path.exists() {
         return Ok(vec![]);
     }
-
     let mut names: Vec<String> = std::fs::read_dir(&workspaces_path)
         .map_err(|e| format!("Failed to read workspaces directory: {}", e))?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().is_dir())
         .filter_map(|entry| entry.file_name().into_string().ok())
         .collect();
-
     names.sort();
     Ok(names)
 }
 
-/// Delete a workspace by name.
-/// Fails if it is the last remaining workspace.
+/// Delete a workspace by name. Fails if it is the last remaining workspace.
 #[tauri::command]
 fn delete_workspace(name: String) -> Result<(), String> {
-    // Load global state to check active workspace
     let state_path = winwork_path("state.json")?;
     let state: serde_json::Value = if state_path.exists() {
         let s = std::fs::read_to_string(&state_path)
@@ -685,7 +724,6 @@ fn delete_workspace(name: String) -> Result<(), String> {
         .and_then(|v| v.as_str())
         .unwrap_or("default");
 
-    // Guard: cannot delete the last workspace
     let all = list_workspaces()?;
     if all.len() <= 1 && all.first() == Some(&name) {
         return Err("Cannot delete the last workspace".to_string());
@@ -699,13 +737,10 @@ fn delete_workspace(name: String) -> Result<(), String> {
     std::fs::remove_dir_all(&workspace_path)
         .map_err(|e| format!("Failed to delete workspace '{}': {}", name, e))?;
 
-    // If we deleted the active workspace, switch to the first remaining one
     if name == active {
         let remaining = list_workspaces()?;
         if let Some(first) = remaining.first() {
-            let new_state = serde_json::json!({
-                "activeWorkspace": first,
-            });
+            let new_state = serde_json::json!({ "activeWorkspace": first });
             let _ = std::fs::write(&state_path, serde_json::to_string_pretty(&new_state).unwrap_or_default());
         }
     }
@@ -746,7 +781,6 @@ pub fn run() {
             list_wiki,
             ai_chat,
             get_api_config,
-            // v0.2 persistence
             save_state,
             load_state,
             ensure_workspace_dir,
