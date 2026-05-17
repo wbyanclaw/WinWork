@@ -7,11 +7,50 @@
   <!-- Local CSS (no CDN dependency, works offline/China) -->
   <link rel="stylesheet" href="styles.css">
   <script>
+    // ── Enhanced Logging System ────────────────────────────────
+    window._logBuffer = [];
+    window._debugVisible = false;
+
     window._log = function() {
       var args = Array.from(arguments);
       var ts = new Date().toISOString().split('T')[1].slice(0,8);
-      console.log('[winwork ' + ts + ']', ...args);
+      var msg = '[winwork ' + ts + '] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      console.log.apply(console, arguments);
+
+      // Buffer logs
+      window._logBuffer.push({ts, msg, type: 'info'});
+      if (window._logBuffer.length > 200) window._logBuffer.shift();
+
+      // Show in debug panel if open
+      if (window._debugVisible) {
+        var logContent = document.getElementById('debugLogContent');
+        if (logContent) {
+          logContent.innerHTML += '<div><span class="timestamp">[' + ts + ']</span> ' + escHtml(args.join(' ')) + '</div>';
+          logContent.scrollTop = logContent.scrollHeight;
+        }
+      }
     };
+
+    function toggleDebugLog() {
+      var panel = document.getElementById('debugLog');
+      if (!panel) return;
+      window._debugVisible = !window._debugVisible;
+      if (window._debugVisible) {
+        panel.classList.remove('hidden');
+        panel.classList.add('open');
+        var logContent = document.getElementById('debugLogContent');
+        if (logContent) {
+          logContent.innerHTML = window._logBuffer.map(function(l) {
+            return '<div><span class="timestamp">[' + l.ts + ']</span> ' + escHtml(l.msg) + '</div>';
+          }).join('');
+          logContent.scrollTop = logContent.scrollHeight;
+        }
+      } else {
+        panel.classList.add('hidden');
+        panel.classList.remove('open');
+      }
+    }
+
     window._log('SCRIPT: loaded');
   </script>
   <script>
@@ -46,6 +85,11 @@
     body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
     #rightPanel { transform: translateX(100%); transition: transform 0.3s ease; position: absolute; right: 0; top: 0; bottom: 0; z-index: 50; box-shadow: -4px 0 12px rgba(0,0,0,0.1); }
     #rightPanel.open { transform: translateX(0); }
+    #debugLog { transform: translateY(100%); transition: transform 0.3s ease; position: fixed; bottom: 0; left: 0; right: 0; height: 200px; background: #1a1a2e; color: #0f0; font-family: monospace; font-size: 11px; padding: 8px; overflow-y: auto; z-index: 9999; }
+    #debugLog.open { transform: translateY(0); }
+    #debugLog .timestamp { color: #666; }
+    #debugLog .error { color: #f55; }
+    #debugLog .warn { color: #fa0; }
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
@@ -85,7 +129,7 @@
   <!-- App identity -->
   <div class="flex items-center gap-2 px-2 flex-shrink-0">
     <div class="w-5 h-5 bg-ink rounded flex items-center justify-center">
-      <span class=""w-3 h-3 text-white"">📁</span></span>
+      <span class="w-3 h-3 text-white">📁</span></span>
     </div>
     <span class="text-[13px] font-semibold text-ink tracking-tight">winwork</span>
   </div>
@@ -97,19 +141,19 @@
   </div>
   <!-- API Key button -->
   <button onclick="showApiKeyModal()" id="apiKeyBtn" class="flex items-center gap-1 text-[11px] text-muted hover:text-brand transition-colors mr-2 px-2 py-1 rounded hover:bg-slate-100">
-    <span class=""w-3 h-3"">🔑</span></span>
+    <span class="w-3 h-3">🔑</span></span>
     <span id="apiKeyStatus">设置API</span>
   </button>
   <!-- Window controls -->
   <div class="flex items-center" id="winControls">
     <button onclick="winMinimize()" class="titlebar-btn" title="最小化">
-      <span class=""w-4 h-4"">➖</span></span>
+      <span class="w-4 h-4">➖</span></span>
     </button>
     <button onclick="winMaximize()" class="titlebar-btn" title="最大化" id="btn-maximize">
-      <span class=""w-3.5 h-3.5"">⬜</span></span>
+      <span class="w-3.5 h-3.5">⬜</span></span>
     </button>
     <button onclick="winClose()" class="titlebar-btn" id="btn-close" title="关闭">
-      <span class=""w-4 h-4"">✕</span></span>
+      <span class="w-4 h-4">✕</span></span>
     </button>
   </div>
 </div>
@@ -119,7 +163,7 @@
   <div class="modal-card text-center">
     <!-- App icon -->
     <div class="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mx-auto mb-5">
-      <span class=""w-8 h-8 text-white"">📁</span></span>
+      <span class="w-8 h-8 text-white">📁</span></span>
     </div>
 
     <!-- Title + subtitle -->
@@ -128,7 +172,7 @@
 
     <!-- Single button (changes based on state) -->
     <button onclick="handleModalButton()" id="modal-main-btn" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-      <span class=""w-4 h-4"">⚡</span></span>
+      <span class="w-4 h-4">⚡</span></span>
       <span id="modal-btn-text">⚡ 一键安装 wind-cli</span>
     </button>
 
@@ -150,7 +194,7 @@
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-bold text-ink">MiniMax API 配置</h3>
       <button onclick="hideApiKeyModal()" class="text-slate-400 hover:text-slate-600">
-        <span class=""w-5 h-5"">✕</span></span>
+        <span class="w-5 h-5">✕</span></span>
       </button>
     </div>
     <p class="text-sm text-muted mb-4">输入 MiniMax API Key 以启用 AI 对话功能</p>
@@ -162,6 +206,15 @@
   </div>
 </div>
 
+<!-- Debug Log Panel -->
+<div id="debugLog" class="hidden">
+  <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-700">
+    <span class="text-gray-400 text-xs">诊断日志</span>
+    <button onclick="toggleDebugLog()" class="text-gray-400 hover:text-white text-xs">[关闭]</button>
+  </div>
+  <div id="debugLogContent"></div>
+</div>
+
   <!-- Main -->
   <div class="flex-1 flex overflow-hidden relative">
 
@@ -170,7 +223,7 @@
       <div class="px-4 py-3 border-b border-border flex items-center justify-between">
         <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
         <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1 text-[11px] text-muted hover:text-brand transition-colors">
-          <span class=""w-3 h-3"">▶</span></span>详情
+          <span class="w-3 h-3">▶</span></span>详情
         </button>
       </div>
       <div class="flex-1 overflow-y-auto py-2" id="fileTree">
@@ -185,10 +238,10 @@
           <span class="text-[10px] font-semibold text-faint uppercase tracking-wide">知识库</span>
         </div>
         <button onclick="doWikiIngest()" id="btn-wiki-ingest" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
-          <span class=""w-3.5 h-3.5"">📤</span></span>文档入库
+          <span class="w-3.5 h-3.5">📤</span></span>文档入库
         </button>
         <button onclick="doWikiLint()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
-          <span class=""w-3.5 h-3.5"">🔍</span></span>健康检查
+          <span class="w-3.5 h-3.5">🔍</span></span>健康检查
         </button>
         <div id="wiki-status" class="px-2 py-1 text-[10px] text-faint"></div>
       </div>
@@ -199,7 +252,7 @@
       <div id="messages" class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
         <div id="welcomeScreen" class="flex-1 flex flex-col items-center justify-center gap-5 text-center">
           <div class="w-14 h-14 bg-ink rounded-2xl flex items-center justify-center shadow-md">
-            <span class=""w-7 h-7 text-white"">📁</span></span>
+            <span class="w-7 h-7 text-white">📁</span></span>
           </div>
           <div>
             <h2 class="text-xl font-bold text-ink tracking-tight mb-2">winwork</h2>
@@ -211,7 +264,7 @@
         <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
           <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"></textarea>
           <button onclick="send()" class="w-8 h-8 bg-brand rounded-lg text-white flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors shadow-sm">
-            <span class=""w-4 h-4"">↑</span></span>
+            <span class="w-4 h-4">↑</span></span>
           </button>
         </div>
         <p class="text-[11px] text-faint mt-2 pl-1">winwork 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
@@ -224,7 +277,7 @@
         <div class="flex items-center justify-between mb-3">
           <span class="text-[12px] font-semibold text-muted uppercase tracking-wide">详情</span>
           <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors">
-            <span class=""w-4 h-4"">✕</span></span>
+            <span class="w-4 h-4">✕</span></span>
           </button>
         </div>
         <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
@@ -235,7 +288,7 @@
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
         <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
-          <span class=""w-8 h-8"">ℹ️</span></span>
+          <span class="w-8 h-8">ℹ️</span></span>
           <p class="text-sm">点击对话中的工具卡片<br>查看详情</p>
         </div>
         <div id="detail-file" class="hidden"></div>
@@ -558,7 +611,7 @@
         <p class="mb-2">${escHtml(text)}</p>
         <div class="mt-2 rounded-lg border border-border overflow-hidden">
           <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
-            <span class=""w-3 h-3 text-brand"">⚡</span></span>
+            <span class="w-3 h-3 text-brand">⚡</span></span>
             <span class="text-[11px] text-muted font-medium">wind — ${escHtml(cmd)}</span>
           </div>
           <div class="px-3 py-2.5">
@@ -717,9 +770,9 @@
       const div = document.createElement('div');
       div.className = `msg ${role} animate-fade-up flex gap-2.5 max-w-2xl ${role === 'user' ? 'ml-auto' : ''}`;
       if (role === 'user') {
-        div.innerHTML = `<div class="flex-1 flex flex-col items-end gap-1"><span class="text-[10px] text-faint px-1">你</span><div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div><div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5"><span class=""w-3.5 h-3.5 text-white"">👤</span></span></div>`;
+        div.innerHTML = `<div class="flex-1 flex flex-col items-end gap-1"><span class="text-[10px] text-faint px-1">你</span><div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div><div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-white">👤</span></span></div>`;
       } else {
-        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class=""w-3.5 h-3.5 text-brand"">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div>`;
+        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div>`;
       }
       container.appendChild(div);
     }
@@ -728,7 +781,7 @@
       const div = document.createElement('div');
       div.id = aid;
       div.className = 'msg agent animate-fade-up flex gap-2.5 max-w-2xl';
-      div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class=""w-3.5 h-3.5 text-brand"">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble"><div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5"><div class="thinking-dots"><span></span><span></span><span></span></div>正在调用 wind-cli 工具...</div></div></div>`;
+      div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble"><div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5"><div class="thinking-dots"><span></span><span></span><span></span></div>正在调用 wind-cli 工具...</div></div></div>`;
       container.appendChild(div);
     }
 
@@ -787,7 +840,7 @@
         <div class="space-y-3">
           <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
             <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
-              <span class=""w-3.5 h-3.5 text-brand"">⌨</span></span>
+              <span class="w-3.5 h-3.5 text-brand">⌨</span></span>
               <span class="text-[11px] font-semibold text-muted">工具调用</span>
             </div>
             <div class="p-3">
@@ -800,7 +853,7 @@
           ${result.data ? `
           <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
             <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
-              <span class=""w-3.5 h-3.5 text-emerald-500"">↗</span></span>
+              <span class="w-3.5 h-3.5 text-emerald-500">↗</span></span>
               <span class="text-[11px] font-semibold text-muted">返回结果</span>
             </div>
             <div class="p-3">
@@ -809,11 +862,11 @@
           </div>` : ''}
           <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
             <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium">
-              <span class=""w-3.5 h-3.5"">✓</span></span>安全校验
+              <span class="w-3.5 h-3.5">✓</span></span>安全校验
             </div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class=""w-3 h-3"">✓</span></span>路径隔离：workspace/ 外不可访问</div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class=""w-3 h-3"">✓</span></span>无路径穿越（../）风险</div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class=""w-3 h-3"">✓</span></span>${result.ok ? '命令执行成功' : '执行失败，已安全拦截'}</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>路径隔离：workspace/ 外不可访问</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>无路径穿越（../）风险</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>${result.ok ? '命令执行成功' : '执行失败，已安全拦截'}</div>
           </div>
         </div>`;
     }
@@ -841,22 +894,28 @@
       if (!panel) return;
       panel.classList.toggle('open');
       if (panel.classList.contains('open')) {
-        btn.innerHTML = '<span class=""w-3.5 h-3.5"">✕</span></span>收起详情';
+        btn.innerHTML = '<span class="w-3.5 h-3.5">✕</span></span>收起详情';
         btn.style.color = 'var(--brand)';
         btn.style.borderColor = 'var(--brand)';
       } else {
-        btn.innerHTML = '<span class=""w-3.5 h-3.5"">▶</span></span>查看详情';
+        btn.innerHTML = '<span class="w-3.5 h-3.5">▶</span></span>查看详情';
         btn.style.color = '';
         btn.style.borderColor = '';
       }
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
     }
 
-    // ── Tauri invoke wrapper ─────────────────────────────────
-    async function invoke(cmd, args = {}) {
+    // ── Tauri invoke wrapper with timeout ────────────────────────
+    async function invoke(cmd, args = {}, timeoutMs = 10000) {
       if (typeof window.__TAURI__ !== 'undefined') {
         const { invoke } = window.__TAURI__.core;
-        return await invoke(cmd, args);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`invoke timeout: ${cmd} (>${timeoutMs}ms)`)), timeoutMs)
+        );
+        return await Promise.race([invoke(cmd, args), timeoutPromise]).catch(e => {
+          window._log && window._log(`invoke ${cmd} failed/timeout:`, e.message);
+          throw e;
+        });
       } else {
         // Fallback: simulate for browser dev
         return { ok: true, data: { entries: [] }, stderr: '' };
@@ -1028,12 +1087,60 @@
     // ── Init (updated for persistence) ───────────────────────
     async function init() {
       window._log('INIT: starting');
+      updateStatusBar('loading', '正在启动...');
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      await checkAllEnv();
-      await loadAppState();
-      await initWorkspace();
-      await loadFileTree();
+
+      // Run env check with timeout - don't block entire init
+      try {
+        updateStatusBar('loading', '检查环境...');
+        await Promise.race([
+          checkAllEnv(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('env check timeout')), 8000))
+        ]);
+        window._log('INIT: env check done');
+      } catch(e) {
+        window._log && window._log('INIT: env check failed/timeout:', e.message);
+        // Continue anyway - modal will handle missing env
+        envState = { windcli: false, llmwiki: false };
+      }
+
+      // Load app state with timeout
+      try {
+        updateStatusBar('loading', '加载状态...');
+        await Promise.race([
+          loadAppState(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('load state timeout')), 5000))
+        ]);
+        window._log('INIT: state loaded');
+      } catch(e) {
+        window._log && window._log('INIT: state load failed:', e.message);
+      }
+
+      // Init workspace with timeout - non-blocking
+      try {
+        updateStatusBar('loading', '初始化工作区...');
+        await Promise.race([
+          initWorkspace(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('init workspace timeout')), 10000))
+        ]);
+        window._log('INIT: workspace ready');
+      } catch(e) {
+        window._log && window._log('INIT: workspace init failed/timeout:', e.message);
+      }
+
+      // Load file tree with timeout
+      try {
+        updateStatusBar('loading', '加载文件...');
+        await Promise.race([
+          loadFileTree(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('load file tree timeout')), 5000))
+        ]);
+      } catch(e) {
+        window._log && window._log('INIT: file tree load failed:', e.message);
+      }
+
       updateStatusBar('ready', '就绪');
+      window._log('INIT: complete');
     }
 
     // ── Workspace Initialization ─────────────────────────────
@@ -1064,11 +1171,25 @@
         case 'ready': colorClass='text-emerald-600'; bgClass='bg-emerald-50'; borderClass='border-emerald-200'; dotColor='bg-emerald-500'; break;
         case 'error': colorClass='text-red-600'; bgClass='bg-red-50'; borderClass='border-red-200'; dotColor='bg-red-500'; break;
       }
-      statusBar.innerHTML = `<span class="flex items-center gap-1.5 ${bgClass} border ${borderClass} ${colorClass} text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>${escHtml(message)}</span>`;
+      statusBar.innerHTML = `
+        <span class="flex items-center gap-1.5 ${bgClass} border ${borderClass} ${colorClass} text-[11px] px-2 py-0.5 rounded-full font-medium">
+          <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+          ${escHtml(message)}
+        </span>
+        <button onclick="toggleDebugLog()" class="text-[10px] text-faint hover:text-muted ml-1" title="查看日志">[日志]</button>
+      `;
     }
 
     // ── Start ─────────────────────────────────────────────────
-    try { init(); } catch(e) { window._log('INIT: FATAL:', e); }
+    // Global error handler for uncaught exceptions
+    window.addEventListener('error', function(e) {
+      window._log('JS ERROR:', e.message, '@', e.filename, 'line', e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window._log('UNHANDLED PROMISE REJECTION:', String(e.reason));
+    });
+
+    try { init(); } catch(e) { window._log('INIT: FATAL:', e.message, e.stack); }
   </script>
 </body>
 </html>

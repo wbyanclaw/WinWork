@@ -81,6 +81,22 @@ fn get_windcli_path() -> String {
 
 fn run_wind(args: &[&str]) -> WindResult {
     let wind_path = get_windcli_path();
+
+    // Check if windcli exists before trying to run
+    if which(&wind_path).is_err() && wind_path != "windcli" {
+        // Try "windcli" as fallback
+        if which("windcli").is_err() {
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: "windcli not found in PATH. Please install wind-cli first.".to_string(),
+                exit_code: -1,
+                data: None,
+            };
+        }
+    }
+
+    // Use Command::current_dir to avoid hanging on certain systems
     let output = StdCommand::new(&wind_path)
         .args(args)
         .stdout(Stdio::piped())
@@ -238,7 +254,17 @@ fn check_windcli() -> HashMap<String, String> {
 #[tauri::command]
 fn check_llm_wiki() -> HashMap<String, String> {
     let mut result = HashMap::new();
-    let out = StdCommand::new(get_windcli_path())
+
+    // First check if windcli is even findable
+    let windcli_path = get_windcli_path();
+    if which(&windcli_path).is_err() && windcli_path != "windcli" {
+        // windcli not in PATH and not at expected install location
+        result.insert("found".to_string(), "false".to_string());
+        result.insert("reason".to_string(), "windcli not found in PATH".to_string());
+        return result;
+    }
+
+    let out = StdCommand::new(&windcli_path)
         .args(["wiki", "status"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -252,8 +278,9 @@ fn check_llm_wiki() -> HashMap<String, String> {
                 result.insert("found".to_string(), "false".to_string());
             }
         }
-        Err(_) => {
+        Err(e) => {
             result.insert("found".to_string(), "false".to_string());
+            result.insert("reason".to_string(), format!("windcli error: {}", e));
         }
     }
     result
