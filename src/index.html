@@ -773,11 +773,11 @@
 
     function buildArgs(key, text) {
       switch (key) {
-        case 'ls': return ['--json', 'ls'];
+        case 'ls': return ['ls'];  // Backend will add --json and workspace path
         case 'write': return ['write', 'test.txt', '--stdin'];
-        case 'wiki_status': return ['--json', 'wiki', 'status'];
-        case 'wiki_lint': return ['--json', 'wiki', 'lint'];
-        default: return ['--json', 'ls'];
+        case 'wiki_status': return ['wiki', 'status'];  // Backend handles --json
+        case 'wiki_lint': return ['wiki', 'lint'];  // Backend handles --json
+        default: return ['ls'];  // Backend will add --json and workspace path
       }
     }
 
@@ -955,8 +955,10 @@
           }
           return result;
         } catch(e) {
-          window._log && window._log(`invoke ${cmd} failed:`, e.message);
-          throw e;
+          // Handle errors gracefully - don't crash on malformed errors
+          const errMsg = e && typeof e === 'object' ? (e.message || String(e)) : String(e || 'unknown error');
+          window._log && window._log(`invoke ${cmd} failed:`, errMsg);
+          return { ok: false, stderr: errMsg, stdout: '', exit_code: -1, data: null };
         }
       } else {
         // Fallback: simulate for browser dev

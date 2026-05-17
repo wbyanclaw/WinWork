@@ -168,6 +168,7 @@ fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> Wi
 
 /// Run a wind-cli command with structured args (no shell injection risk).
 /// Accepts a Vec<String> so paths with spaces are handled correctly.
+/// Handles 'ls' specially by prepending the workspace path.
 #[tauri::command]
 fn run_wind_command(args: Vec<String>) -> WindResult {
     if args.is_empty() {
@@ -179,6 +180,19 @@ fn run_wind_command(args: Vec<String>) -> WindResult {
             data: None,
         };
     }
+
+    // Handle ls command specially - prepend workspace path
+    let first_arg = args[0].to_lowercase();
+    if first_arg == "ls" {
+        let workspace = get_workspace_path();
+        let mut ls_args: Vec<&str> = vec!["--json", "ls", &workspace];
+        // Add remaining args
+        for arg in args.iter().skip(1) {
+            ls_args.push(arg);
+        }
+        return run_wind(&ls_args);
+    }
+
     // Convert Vec<String> to Vec<&str> slices for run_wind
     let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     run_wind(&parts)
@@ -206,7 +220,20 @@ fn get_version() -> WindResult {
     run_wind(&["--version"])
 }
 
-/// Get workspace path from winwork state or temp fallback
+/// Get workspace path using proper directory structure:
+/// ~/.local/share/wind/workspace/
+/// ~/.local/share/wind/wiki/
+fn get_wind_root() -> std::path::PathBuf {
+    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "wind-cli", "wind") {
+        proj_dirs.data_dir().to_path_buf()
+    } else if let Some(home) = std::env::var_os("HOME") {
+        std::path::Path::new(&home).join(".local").join("share").join("wind")
+    } else {
+        std::env::temp_dir().join("wind")
+    }
+}
+
+/// Get workspace path from winwork state or proper fallback
 #[tauri::command]
 fn get_workspace_path() -> String {
     // First try to load from winwork state
@@ -219,16 +246,29 @@ fn get_workspace_path() -> String {
             }
         }
     }
-    // Fallback: use temp dir for demo workspace
-    let temp = std::env::temp_dir();
-    temp.join("wind-demo").to_string_lossy().into_owned()
+    // Use proper directory structure: ~/.local/share/wind/workspace/
+    get_wind_root().join("workspace").to_string_lossy().into_owned()
 }
 
-/// Initialize demo workspace
+/// Get wiki directory path
+#[tauri::command]
+fn get_workspace_wiki_path() -> String {
+    get_wind_root().join("wiki").to_string_lossy().into_owned()
+}
+
+/// Initialize demo workspace with proper directory structure:
+/// ~/.local/share/wind/workspace/
+/// ~/.local/share/wind/wiki/
 #[tauri::command]
 fn init_demo_workspace() -> WindResult {
     let workspace = get_workspace_path();
+    let wiki = get_workspace_wiki_path();
+
+    // Create workspace directory
     let _ = std::fs::create_dir_all(&workspace);
+
+    // Create wiki directory
+    let _ = std::fs::create_dir_all(&wiki);
 
     // Save workspace path to winwork state so wind-cli uses it
     if let Ok(winwork_root) = winwork_root() {
@@ -240,7 +280,19 @@ fn init_demo_workspace() -> WindResult {
     }
 
     // Initialize with wind-cli (this sets up wind config with the workspace root)
-    run_wind(&["init", &workspace])
+    let result = run_wind(&["init", &workspace]);
+
+    if result.ok {
+        WindResult {
+            ok: true,
+            stdout: format!("工作区初始化成功:\n  workspace: {}\n  wiki: {}", workspace, wiki),
+            stderr: result.stderr,
+            exit_code: result.exit_code,
+            data: result.data,
+        }
+    } else {
+        result
+    }
 }
 
 /// List directory listing (JSON format)
@@ -308,11 +360,15 @@ fn check_llm_wiki() -> HashMap<String, String> {
 
     match out {
         Ok(o) => {
-            if o.status.success() {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            // Check for "unrecognized subcommand 'wiki'" which means wiki is not supported
+            if stderr.contains("unrecognized subcommand") || stderr.contains("unknown subcommand") {
+                result.insert("found".to_string(), "false".to_string());
+                result.insert("reason".to_string(), "当前 wind-cli 版本不支持 wiki 子命令".to_string());
+            } else if o.status.success() {
                 result.insert("found".to_string(), "true".to_string());
             } else {
                 result.insert("found".to_string(), "false".to_string());
-                let stderr = String::from_utf8_lossy(&o.stderr);
                 if !stderr.is_empty() {
                     result.insert("reason".to_string(), stderr.to_string());
                 }
@@ -784,6 +840,7 @@ pub fn run() {
             list_tools,
             get_version,
             get_workspace_path,
+            get_workspace_wiki_path,
             init_demo_workspace,
             list_workspace,
             check_windcli,
