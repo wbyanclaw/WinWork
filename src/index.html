@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>winwork</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -25,7 +25,7 @@
     }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* Google Fonts removed for China compatibility */
     body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
     #rightPanel { transform: translateX(100%); transition: transform 0.3s ease; position: absolute; right: 0; top: 0; bottom: 0; z-index: 50; box-shadow: -4px 0 12px rgba(0,0,0,0.1); }
     #rightPanel.open { transform: translateX(0); }
@@ -1020,3 +1020,4 @@
   </script>
 </body>
 </html>
+
