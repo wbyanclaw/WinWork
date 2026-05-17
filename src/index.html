@@ -320,9 +320,38 @@
   <script>
     try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
 
-    // ── State ─────────────────────────────────────────────────
-    let lastResult = null;
-    let apiKey = localStorage.getItem('minimax_api_key') || '';
+    // ── API Key Storage (obfuscated, not plaintext) ─────────────
+    // Simple XOR obfuscation to prevent casual localStorage reading.
+    // Not real encryption — adequate for demo app; swap for tauri-plugin-store for production.
+    const _apiKeyObfuscationKey = 'winwork_v029_xor';
+    function _xorObfuscate(str) {
+      const k = _apiKeyObfuscationKey;
+      let out = '';
+      for (let i = 0; i < str.length; i++) {
+        out += String.fromCharCode(str.charCodeAt(i) ^ k.charCodeAt(i % k.length));
+      }
+      return btoa(out);
+    }
+    function _xorDeobfuscate(b64) {
+      try {
+        const str = atob(b64);
+        const k = _apiKeyObfuscationKey;
+        let out = '';
+        for (let i = 0; i < str.length; i++) {
+          out += String.fromCharCode(str.charCodeAt(i) ^ k.charCodeAt(i % k.length));
+        }
+        return out;
+      } catch(e) { return ''; }
+    }
+    function _loadApiKey() {
+      const stored = localStorage.getItem('minimax_api_key_obf');
+      return stored ? _xorDeobfuscate(stored) : '';
+    }
+    function _saveApiKey(key) {
+      if (key) localStorage.setItem('minimax_api_key_obf', _xorObfuscate(key));
+      else localStorage.removeItem('minimax_api_key_obf');
+    }
+    let apiKey = _loadApiKey();
     updateApiKeyStatus();
 
     // ── API Key Management ───────────────────────────────────
@@ -339,14 +368,14 @@
     function saveApiKey() {
       const input = document.getElementById('apiKeyInput');
       apiKey = input.value.trim();
-      localStorage.setItem('minimax_api_key', apiKey);
+      _saveApiKey(apiKey);
       updateApiKeyStatus();
       hideApiKeyModal();
     }
 
     function clearApiKey() {
       apiKey = '';
-      localStorage.removeItem('minimax_api_key');
+      _saveApiKey('');
       document.getElementById('apiKeyInput').value = '';
       updateApiKeyStatus();
     }
@@ -361,14 +390,6 @@
         status.textContent = '设置API';
         btn.classList.remove('text-emerald-600');
       }
-    }
-
-    // ── Init ─────────────────────────────────────────────────
-    async function init() {
-      window._log('INIT: starting');
-      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      await checkAllEnv();
-      await loadFileTree();
     }
 
     // ── File Tree ──────────────────────────────────────────────
@@ -692,15 +713,7 @@
     function buildArgs(key, text) {
       switch (key) {
         case 'ls': return ['ls', '--json'];
-        case 'mkdir': {
-          const m = text.match(/创建.*?[\s"']*(\S+)/);
-          return ['mkdir', m ? m[1] : 'newdir'];
-        }
         case 'write': return ['write', 'test.txt', '--stdin'];
-        case 'wft': {
-          const m = text.match(/打开.*?[\s"']*(\S+)/);
-          return ['wft', 'file', m ? m[1] : 'test.txt'];
-        }
         case 'wiki_status': return ['wiki', 'status'];
         case 'wiki_lint': return ['wiki', 'lint'];
         default: return ['ls', '--json'];
@@ -779,9 +792,20 @@
             if (!path) { document.getElementById(aid + '-bubble').innerHTML = '<p>已取消</p>'; return; }
             result = await invoke('wiki_ingest', { path });
             displayWindResult(aid, text, result, 'wiki ingest');
+          } else if (key === 'mkdir') {
+            // Extract path with simple token grab (no fragile regex split)
+            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
+            const path = tokens[tokens.length - 1] || 'newdir';
+            result = await invoke('mkdir_dir', { path });
+            displayWindResult(aid, text, result, 'mkdir');
+          } else if (key === 'wft') {
+            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
+            const file = tokens[tokens.length - 1] || 'test.txt';
+            result = await invoke('wft_open', { file });
+            displayWindResult(aid, text, result, 'wft');
           } else {
             const args = buildArgs(key, text);
-            result = await invoke('run_wind_command', { args: args.join(' ') });
+            result = await invoke('run_wind_command', { args });
             displayWindResult(aid, text, result, args[0]);
           }
         }
@@ -815,90 +839,7 @@
     }
 
     // ── Detail Panel ─────────────────────────────────────────
-    function updateDetailPanel(result, cmd) {
-      document.getElementById('detail-placeholder')?.classList.add('hidden');
-      document.getElementById('detail-file')?.classList.remove('hidden');
-      document.getElementById('detail-trace')?.classList.remove('hidden');
-      document.getElementById('detail-source')?.classList.remove('hidden');
-
-      const trace = document.getElementById('detail-trace');
-      const source = document.getElementById('detail-source');
-
-      // Trace tab
-      trace.innerHTML = buildTraceHTML(result, cmd);
-
-      // Source tab
-      source.innerHTML = buildSourceHTML(result, cmd);
-
-      // File tab
-      const file = document.getElementById('detail-file');
-      if (result.data && result.data.content) {
-        file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
-      } else {
-        file.innerHTML = `<div class="text-sm text-faint text-center py-8">选择文件查看内容</div>`;
-      }
-
-      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-    }
-
-    function buildTraceHTML(result, cmd) {
-      const steps = [
-        { n: 1, color: 'blue', label: '用户输入', detail: `"${cmd}"` },
-        { n: 2, color: 'emerald', label: 'AI 解析意图', detail: `wind ${escHtml(cmd)}` },
-        { n: 3, color: 'amber', label: 'wind-cli 执行', detail: `$ wind ${escHtml(cmd)}` },
-        { n: 4, color: 'purple', label: '返回结果', detail: result.data ? JSON.stringify(result.data).slice(0, 120) + '...' : result.stderr || '无输出' },
-        { n: 5, color: 'green', label: 'AI 格式化回复', detail: result.ok ? '格式化输出' : '错误信息已展示' },
-      ];
-
-      return steps.map(s => `
-        <div class="flex gap-3 mb-4">
-          <div class="flex flex-col items-center">
-            <div class="w-6 h-6 rounded-full bg-${s.color}-100 border-2 border-${s.color}-300 text-${s.color}-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">${s.n}</div>
-            ${s.n < 5 ? '<div class="flex-1 w-px bg-border mt-1"></div>' : ''}
-          </div>
-          <div class="${s.n < 5 ? 'pb-3' : ''} flex-1">
-            <div class="text-[11px] text-faint mb-0.5">步骤 ${s.n} · ${s.label}</div>
-            <div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed font-mono">${escHtml(s.detail)}</div>
-          </div>
-        </div>`).join('');
-    }
-
-    function buildSourceHTML(result, cmd) {
-      const args = cmd.split(' ');
-      return `
-        <div class="space-y-3">
-          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
-            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
-              <span class="w-3.5 h-3.5 text-brand">⌨</span></span>
-              <span class="text-[11px] font-semibold text-muted">工具调用</span>
-            </div>
-            <div class="p-3">
-              <div class="text-[10px] text-faint mb-1">wind-cli 命令</div>
-              <div class="font-mono text-[12px] text-slate-700 mb-2">wind ${escHtml(cmd)}</div>
-              <div class="text-[10px] text-faint mb-1">执行上下文</div>
-              <div class="font-mono text-[11px] text-slate-500">cwd: ~/.local/share/wind/workspace/</div>
-            </div>
-          </div>
-          ${result.data ? `
-          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
-            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2">
-              <span class="w-3.5 h-3.5 text-emerald-500">↗</span></span>
-              <span class="text-[11px] font-semibold text-muted">返回结果</span>
-            </div>
-            <div class="p-3">
-              <pre class="text-[11px] text-slate-700 font-mono whitespace-pre">${highlightJSON(result.data)}</pre>
-            </div>
-          </div>` : ''}
-          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
-            <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium">
-              <span class="w-3.5 h-3.5">✓</span></span>安全校验
-            </div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>路径隔离：workspace/ 外不可访问</div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>无路径穿越（../）风险</div>
-            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-3 h-3">✓</span></span>${result.ok ? '命令执行成功' : '执行失败，已安全拦截'}</div>
-          </div>
-        </div>`;
-    }
+    // (detail-file / detail-trace / detail-source panels are updated by displayWindResult)
 
     // ── Detail panel tab switching ───────────────────────────
     function switchTab(name, btn) {
@@ -907,7 +848,7 @@
         t.classList.remove('active');
         t.classList.add('text-muted');
       });
-      const panel = document.getElementById('panel-' + name);
+      const panel = document.getElementById('detail-' + name);
       if (panel) panel.classList.remove('hidden');
       if (btn) {
         btn.classList.add('active', 'text-brand', 'bg-white');
@@ -1152,7 +1093,7 @@
         window._log && window._log('INIT: state load failed:', e.message);
       }
 
-      // Init workspace with timeout - non-blocking
+      // Ensure workspace init completes before entering UI
       try {
         updateStatusBar('loading', '初始化工作区...');
         await Promise.race([
@@ -1173,6 +1114,11 @@
         ]);
       } catch(e) {
         window._log && window._log('INIT: file tree load failed:', e.message);
+      }
+
+      // Close install modal and enter main UI (only if windcli is available)
+      if (envState.windcli) {
+        enterMainUI();
       }
 
       updateStatusBar('ready', '就绪');

@@ -166,11 +166,11 @@ fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> Wi
     }
 }
 
-/// Run a wind-cli command by passing raw args string
+/// Run a wind-cli command with structured args (no shell injection risk).
+/// Accepts a Vec<String> so paths with spaces are handled correctly.
 #[tauri::command]
-fn run_wind_command(args: String) -> WindResult {
-    let parts: Vec<&str> = args.split_whitespace().collect();
-    if parts.is_empty() {
+fn run_wind_command(args: Vec<String>) -> WindResult {
+    if args.is_empty() {
         return WindResult {
             ok: false,
             stdout: String::new(),
@@ -179,6 +179,8 @@ fn run_wind_command(args: String) -> WindResult {
             data: None,
         };
     }
+    // Convert Vec<String> to Vec<&str> slices for run_wind
+    let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     run_wind(&parts)
 }
 
@@ -465,6 +467,18 @@ fn wiki_lint() -> WindResult {
     run_wind(&["wiki", "lint"])
 }
 
+/// Create a directory via `wind mkdir <path>` with typed parameter (no regex parsing).
+#[tauri::command]
+fn mkdir_dir(path: String) -> WindResult {
+    run_wind(&["mkdir", &path])
+}
+
+/// Open a file via `wind wft file <path>` with typed parameter (no regex parsing).
+#[tauri::command]
+fn wft_open(file: String) -> WindResult {
+    run_wind(&["wft", "file", &file])
+}
+
 /// Ingest a file into the wiki via `wind wiki ingest <path>`
 #[tauri::command]
 fn wiki_ingest(path: String) -> WindResult {
@@ -594,7 +608,9 @@ async fn ai_chat(
             if let Some(cmd) = line.trim().strip_prefix("[Executes:") {
                 let cmd = cmd.trim_end_matches(']').trim();
                 commands_executed.push(cmd.to_string());
-                let result = run_wind_command(cmd.to_string());
+                // Split on whitespace so "wind mkdir path" → ["wind", "mkdir", "path"]
+                let parts: Vec<String> = cmd.split_whitespace().map(String::from).collect();
+                let result = run_wind_command(parts);
                 command_results.push(serde_json::json!({
                     "command": cmd,
                     "ok": result.ok,
@@ -774,6 +790,8 @@ pub fn run() {
             trigger_install,
             wiki_status,
             wiki_lint,
+            mkdir_dir,
+            wft_open,
             wiki_ingest,
             wiki_query,
             read_file,
