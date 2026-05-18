@@ -154,7 +154,10 @@
     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
     <span id="apiStatusText">API 已连接</span>
   </div>
-  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.18</span>
+  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.20</span>
+  <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
+  <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
+  <span id="clickTest" class="text-xs text-green-500 cursor-pointer px-1" onclick="window._log && window._log('CLICK OK'); this.textContent='✓';">[测试]</span>
   <!-- Diagnostics/Logs button (separate from view details) -->
   <button onclick="toggleDiagnostics()" id="diagBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-amber-600 border border-border rounded-lg px-3 py-1.5 transition-colors bg-white hover:bg-amber-50">
     <span class="text-sm">🔍</span>
@@ -1548,10 +1551,8 @@
         window._log && window._log('INIT: file tree load failed:', e.message);
       }
 
-      // Close install modal and enter main UI (only if windcli is available)
-      if (envState.windcli) {
-        enterMainUI();
-      }
+      // Always enter main UI — modal visibility is already controlled by checkAllEnv()
+      enterMainUI();
 
       updateStatusBar('ready', '就绪');
       window._log('INIT: complete');
