@@ -127,6 +127,7 @@
     .detail-tab.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #1d4ed8; }
     .detail-tab { color: #64748b; }
     .detail-tab:hover { color: #1d4ed8; }
+    .mode-tab.active { background: white; color: #1d4ed8; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .scenario-btn { transition: all 0.15s; }
     .scenario-btn:hover { border-color: #1d4ed8; color: #1d4ed8; background: #eff6ff; }
 
@@ -139,26 +140,43 @@
 <body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
 
 <!-- Header (mockup style - no custom window controls) -->
-<header class="h-14 bg-white border-b border-border flex items-center px-6 gap-4 flex-shrink-0 shadow-sm">
-  <!-- Logo -->
-  <div class="flex items-center gap-2.5">
+<header class="h-14 bg-white border-b border-border flex items-center px-4 gap-3 flex-shrink-0 shadow-sm select-none" data-tauri-drag-region>
+  <!-- Logo (draggable area) -->
+  <div class="flex items-center gap-2.5" data-tauri-drag-region>
     <div class="w-8 h-8 bg-ink rounded-lg flex items-center justify-center">
       <span class="text-white text-sm" id="header-logo-icon">📁</span>
     </div>
-    <span class="font-bold text-[15px] text-ink tracking-tight">winwork</span>
+    <span class="font-bold text-[15px] text-ink tracking-tight" data-tauri-drag-region>winwork</span>
   </div>
-  <div class="flex-1"></div>
-  <!-- API Status -->
+  <div class="flex-1" data-tauri-drag-region></div>
+  <!-- Connection Status -->
   <div id="apiStatusBadge" class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium hidden">
     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
     <span id="apiStatusText">API 已连接</span>
   </div>
   <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.16</span>
-  <!-- Detail toggle -->
+  <!-- Diagnostics/Logs button (separate from view details) -->
+  <button onclick="toggleDiagnostics()" id="diagBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-amber-600 border border-border rounded-lg px-3 py-1.5 transition-colors bg-white hover:bg-amber-50">
+    <span class="text-sm">🔍</span>
+    诊断/日志
+  </button>
+  <!-- View Details button -->
   <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
     <span class="text-sm">📋</span>
     查看详情
   </button>
+  <!-- Window Controls (non-draggable) -->
+  <div class="flex items-center gap-1 ml-2 -mr-1">
+    <button onclick="winMinimize()" id="btn-minimize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最小化">
+      <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2"/></svg>
+    </button>
+    <button onclick="winMaximize()" id="btn-maximize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最大化">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10"/></svg>
+    </button>
+    <button onclick="winClose()" id="btn-close" class="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500 hover:text-white text-muted transition-colors" title="关闭">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 1L11 11M11 1L1 11"/></svg>
+    </button>
+  </div>
 </header>
 
 <!-- Environment Install Modal — single button, non-blocking install -->
@@ -278,7 +296,7 @@
             <h2 class="text-xl font-bold text-ink tracking-tight mb-2">winwork</h2>
             <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，winwork 将自动调用 wind-cli 完成文件操作</p>
           </div>
-          <!-- Scenario chips -->
+          <!-- Scenario chips - Work operations -->
           <div class="flex flex-wrap gap-2 justify-center mt-1">
             <button onclick="runScenario('ls')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
               <span class="w-3.5 h-3.5">📋</span> 列出文件
@@ -291,6 +309,21 @@
             </button>
             <button onclick="runScenario('wft')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
               <span class="w-3.5 h-3.5">🔗</span> WFT 打开
+            </button>
+          </div>
+          <!-- Diagnostic operations -->
+          <div class="flex flex-wrap gap-2 justify-center mt-2">
+            <button onclick="doCheckEnv()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>🔍</span> 检查环境
+            </button>
+            <button onclick="doViewLogs()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>📜</span> 查看日志
+            </button>
+            <button onclick="doCheckWikiStatus()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>📚</span> 知识库状态
+            </button>
+            <button onclick="doReloadWorkspace()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>🔄</span> 重载工作区
             </button>
           </div>
         </div>
@@ -306,29 +339,75 @@
       </div>
     </main>
 
-    <!-- Right Detail Panel -->
+    <!-- Right Detail + Diagnostics Panel -->
     <aside id="rightPanel" class="w-[420px] bg-white border-l border-border flex flex-col overflow-hidden">
+      <!-- Primary mode toggle: Details / Diagnostics -->
       <div class="px-5 py-3.5 border-b border-border flex-shrink-0">
         <div class="flex items-center justify-between mb-3">
-          <span class="text-[12px] font-semibold text-muted uppercase tracking-wide">详情</span>
+          <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+            <button onclick="switchMode('details', this)" class="mode-tab flex items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-medium transition-all active" id="btn-mode-details">
+              <span>📋</span> 详情
+            </button>
+            <button onclick="switchMode('diagnostics', this)" class="mode-tab flex items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-medium transition-all" id="btn-mode-diagnostics">
+              <span>🔍</span> 诊断
+            </button>
+          </div>
           <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors">
             <span class="w-4 h-4">✕</span></span>
           </button>
         </div>
-        <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+        <!-- Secondary tabs -->
+        <div id="details-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5">
           <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-file">文件内容</button>
           <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-trace">执行链路</button>
           <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-source">数据溯源</button>
         </div>
+        <div id="diagnostics-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5 hidden">
+          <button onclick="switchDiagTab('startup', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all active" id="tab-startup">启动日志</button>
+          <button onclick="switchDiagTab('calls', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-calls">调用日志</button>
+          <button onclick="switchDiagTab('error', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-error">错误定位</button>
+        </div>
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
-        <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
-          <span class="w-8 h-8">ℹ️</span></span>
-          <p class="text-sm">点击对话中的工具卡片<br>查看详情</p>
+        <!-- Details mode content -->
+        <div id="details-panel">
+          <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
+            <span class="w-8 h-8">ℹ️</span></span>
+            <p class="text-sm">点击对话中的工具卡片<br>查看详情</p>
+          </div>
+          <div id="detail-file" class="hidden"></div>
+          <div id="detail-trace" class="hidden"></div>
+          <div id="detail-source" class="hidden"></div>
         </div>
-        <div id="detail-file" class="hidden"></div>
-        <div id="detail-trace" class="hidden"></div>
-        <div id="detail-source" class="hidden"></div>
+        <!-- Diagnostics mode content -->
+        <div id="diagnostics-panel" class="hidden">
+          <div id="diag-startup" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">启动日志</span>
+              <button onclick="clearLog('startup')" class="text-xs text-faint hover:text-muted">清空</button>
+            </div>
+            <div id="startup-log-content" class="font-mono text-[11px] text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div class="text-faint text-center py-4">暂无启动日志</div>
+            </div>
+          </div>
+          <div id="diag-calls" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">调用日志</span>
+              <button onclick="clearLog('calls')" class="text-xs text-faint hover:text-muted">清空</button>
+            </div>
+            <div id="calls-log-content" class="font-mono text-[11px] text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div class="text-faint text-center py-4">暂无调用日志</div>
+            </div>
+          </div>
+          <div id="diag-error" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">错误定位</span>
+            </div>
+            <div id="error-content" class="text-[12px] text-slate-600">
+              <div class="text-faint text-center py-4">无错误记录</div>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -839,6 +918,108 @@
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
+    // ── Mode Switching (Details / Diagnostics) ─────────────────
+    let currentMode = 'details';
+    let currentDiagTab = 'startup';
+
+    function switchMode(mode, btn) {
+      currentMode = mode;
+      // Update mode buttons
+      document.querySelectorAll('.mode-tab').forEach(t => {
+        t.classList.remove('active', 'bg-white', 'text-brand', 'shadow-sm');
+        t.classList.add('text-muted');
+      });
+      btn.classList.add('active', 'bg-white', 'text-brand', 'shadow-sm');
+      btn.classList.remove('text-muted');
+
+      // Show/hide secondary tabs
+      document.getElementById('details-tabs').classList.toggle('hidden', mode !== 'details');
+      document.getElementById('diagnostics-tabs').classList.toggle('hidden', mode !== 'diagnostics');
+
+      // Show/hide panels
+      document.getElementById('details-panel').classList.toggle('hidden', mode !== 'details');
+      document.getElementById('diagnostics-panel').classList.toggle('hidden', mode !== 'diagnostics');
+
+      // If switching to diagnostics, show current diag tab
+      if (mode === 'diagnostics') {
+        showDiagTab(currentDiagTab);
+      }
+    }
+
+    function switchDiagTab(tab, btn) {
+      currentDiagTab = tab;
+      document.querySelectorAll('#diagnostics-tabs .detail-tab').forEach(t => {
+        t.classList.remove('active', 'bg-white', 'text-brand', 'shadow-sm');
+        t.classList.add('text-muted');
+      });
+      btn.classList.add('active', 'bg-white', 'text-brand', 'shadow-sm');
+      btn.classList.remove('text-muted');
+
+      document.getElementById('diag-startup').classList.toggle('hidden', tab !== 'startup');
+      document.getElementById('diag-calls').classList.toggle('hidden', tab !== 'calls');
+      document.getElementById('diag-error').classList.toggle('hidden', tab !== 'error');
+    }
+
+    function showDiagTab(tab) {
+      const btn = document.getElementById('tab-' + tab);
+      if (btn) switchDiagTab(tab, btn);
+    }
+
+    function toggleDiagnostics() {
+      // Open right panel and switch to diagnostics mode
+      const panel = document.getElementById('rightPanel');
+      panel.classList.add('open');
+      switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+    }
+
+    // ── Auto-switch to diagnostics on failures ─────────────────
+    function autoSwitchToDiagnostics(type) {
+      if (!document.getElementById('rightPanel').classList.contains('open')) {
+        document.getElementById('rightPanel').classList.add('open');
+      }
+      if (type === 'startup') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('startup');
+      } else if (type === 'call') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('calls');
+      } else if (type === 'error') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('error');
+      }
+    }
+
+    // ── Log Management ─────────────────────────────────────────
+    const _diagLogs = { startup: [], calls: [], errors: [] };
+
+    function appendLog(type, msg) {
+      const ts = new Date().toISOString().split('T')[1].slice(0,12);
+      _diagLogs[type].push({ts, msg});
+      if (_diagLogs[type].length > 500) _diagLogs[type].shift();
+      renderLog(type);
+    }
+
+    function renderLog(type) {
+      const el = document.getElementById(type + '-log-content');
+      if (!el) return;
+      if (_diagLogs[type].length === 0) {
+        el.innerHTML = '<div class="text-faint text-center py-4">暂无日志</div>';
+        return;
+      }
+      el.innerHTML = _diagLogs[type].map(l => `<div class="py-0.5 border-b border-slate-100 last:border-0"><span class="text-faint mr-2">${l.ts}</span>${escHtml(l.msg)}</div>`).join('');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog(type) {
+      _diagLogs[type] = [];
+      renderLog(type);
+    }
+
+    // Expose log functions globally
+    window.appendStartupLog = (msg) => appendLog('startup', msg);
+    window.appendCallLog = (msg) => appendLog('calls', msg);
+    window.appendErrorLog = (msg) => appendLog('errors', msg);
+
     function highlightJSON(obj) {
       const s = JSON.stringify(obj, null, 2);
       return s
@@ -884,6 +1065,43 @@
       const inp = document.getElementById('input');
       inp.value = scenarios[key] || '列出文件';
       send();
+    }
+
+    // ── Diagnostic helpers ───────────────────────────────────
+    async function doCheckEnv() {
+      appendCallLog('执行环境检查...');
+      const info = await invoke('check_windcli');
+      const wiki = await invoke('check_llm_wiki');
+      const ww = await invoke('get_winwork_version');
+      let msg = `winwork: ${ww}\nwind-cli: ${info.found === 'true' ? '已安装 (' + (info.path || 'unknown') + ') v' + (info.version || '?') : '未安装'}\n知识库: ${wiki.found === 'true' ? '可用' : '不可用 (' + (wiki.reason || 'unknown') + ')'}`;
+      appendCallLog(msg);
+      autoSwitchToDiagnostics('call');
+      // Show result in messages
+      appendMessage('agent', msg, document.getElementById('messages'));
+    }
+
+    function doViewLogs() {
+      autoSwitchToDiagnostics('call');
+      appendCallLog('用户请求查看日志');
+    }
+
+    async function doCheckWikiStatus() {
+      appendCallLog('检查知识库状态...');
+      autoSwitchToDiagnostics('startup');
+      try {
+        const result = await invoke('wiki_status');
+        appendCallLog('wiki status: ' + (result.stdout || result.stderr || '完成'));
+      } catch(e) {
+        appendCallLog('错误: ' + String(e));
+      }
+      autoSwitchToDiagnostics('startup');
+    }
+
+    async function doReloadWorkspace() {
+      appendCallLog('重载工作区...');
+      await loadFileTree();
+      appendCallLog('工作区已重载');
+      autoSwitchToDiagnostics('startup');
     }
 
     // ── Command router ───────────────────────────────────────
