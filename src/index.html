@@ -154,7 +154,7 @@
     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
     <span id="apiStatusText">API 已连接</span>
   </div>
-  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.16</span>
+  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.18</span>
   <!-- Diagnostics/Logs button (separate from view details) -->
   <button onclick="toggleDiagnostics()" id="diagBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-amber-600 border border-border rounded-lg px-3 py-1.5 transition-colors bg-white hover:bg-amber-50">
     <span class="text-sm">🔍</span>
@@ -282,6 +282,16 @@
           <span class="w-3.5 h-3.5">🔍</span></span>健康检查
         </button>
         <div id="wiki-status" class="px-2 py-1 text-[10px] text-faint"></div>
+      </div>
+      <!-- Config Section -->
+      <div class="border-t border-border px-3 py-3">
+        <div class="px-2 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide">配置</span>
+        </div>
+        <button onclick="showApiKeyModal()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="w-3.5 h-3.5">⚙️</span></span>API 设置
+        </button>
+        <div id="apiKeyStatus" class="px-2 py-1 text-[10px] text-faint"></div>
       </div>
     </aside>
 
@@ -516,10 +526,16 @@
       if (!container) return;
 
       try {
-        // Get workspace files
-        const wsResult = await invoke('list_workspace');
-        // Get wiki files
-        const wikiResult = await invoke('list_wiki');
+        // Get workspace files with timeout
+        const wsResult = await Promise.race([
+          invoke('list_workspace'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+        // Get wiki files with timeout
+        const wikiResult = await Promise.race([
+          invoke('list_wiki'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
         container.innerHTML = '';
 
         // Section: 文件 (workspace)
@@ -597,7 +613,7 @@
 
         container.appendChild(wikiSection);
       } catch(e) {
-        container.innerHTML = '<div class="px-4 py-2 text-xs text-faint">加载失败</div>';
+        container.innerHTML = '<div class="px-4 py-2 text-xs text-amber-600">wind-cli 未安装或不可用</div><div class="px-4 py-1 text-xs text-faint">请先安装 wind-cli 或点击"检查环境"</div>';
         window._log && window._log('loadFileTree failed:', e);
       }
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
@@ -640,7 +656,7 @@
     }
 
     // ── Environment Check ─────────────────────────────────────
-    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.16' };
+    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.18' };
 
     async function checkAllEnv() {
       const statusBar = document.getElementById('envStatusBar');
