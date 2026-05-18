@@ -153,7 +153,7 @@
     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
     <span id="apiStatusText">API 已连接</span>
   </div>
-  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.13</span>
+  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.16</span>
   <!-- Detail toggle -->
   <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
     <span class="text-sm">📋</span>
@@ -565,7 +565,7 @@
     }
 
     // ── Environment Check ─────────────────────────────────────
-    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.13' };
+    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.16' };
 
     async function checkAllEnv() {
       const statusBar = document.getElementById('envStatusBar');
