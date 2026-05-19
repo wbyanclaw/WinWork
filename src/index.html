@@ -119,16 +119,22 @@
     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
     <span id="apiStatusText">API 已连接</span>
   </div>
-  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.20</span>
+  <span id="winworkVersionBadge" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full" title="winwork 版本">winwork: <span id="winworkVersion">-</span></span>
+  <span id="windcliVersionBadge" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full" title="wind-cli 版本">wind-cli: <span id="windcliVersion">-</span></span>
   <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
   <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
-  <span id="clickTest" class="text-xs text-green-500 cursor-pointer px-1" onclick="window._log && window._log('CLICK OK'); this.textContent='✓';">[测试]</span>
-  <!-- Diagnostics/Logs button (separate from view details) -->
-  <button onclick="toggleDiagnostics()" id="diagBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-amber-600 border border-border rounded-lg px-3 py-1.5 transition-colors bg-white hover:bg-amber-50">
-    <span class="text-sm">🐛</span>
-    调试
+  <!-- API Settings button -->
+  <button onclick="showApiKeyModal()" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
+    <span class="text-sm">⚙️</span>
+    API
   </button>
-  <!-- View Details button -->
+  <!-- Upgrade button -->
+  <button onclick="showUpgradeModal()" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white relative">
+    <span class="text-sm">🔄</span>
+    <span id="upgradeBtnText">更新</span>
+    <span id="upgradeBadge" class="hidden absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+  </button>
+  <!-- Debug panel button -->
   <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
     <span class="text-sm">🐛</span>
     调试
@@ -215,9 +221,6 @@
     <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
       <div class="px-4 py-3 border-b border-border flex items-center justify-between">
         <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
-        <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1 text-[11px] text-muted hover:text-brand transition-colors">
-          <span class="w-3 h-3">▶</span></span>调试
-        </button>
       </div>
       <div class="flex-1 overflow-y-auto py-2" id="fileTree">
         <div class="px-3 pb-1">
@@ -225,21 +228,7 @@
         </div>
         <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
       </div>
-      <!-- Config Section -->
-      <div class="border-t border-border px-3 py-3">
-        <div class="px-2 pb-1">
-          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide">配置</span>
-        </div>
-        <button onclick="showApiKeyModal()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
-          <span class="w-3.5 h-3.5">⚙️</span></span>API 设置
-        </button>
-        <div id="apiKeyStatus" class="px-2 py-1 text-[10px] text-faint"></div>
-        <button onclick="showUpgradeModal()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors mt-1">
-          <span class="w-3.5 h-3.5">🔄</span></span><span id="upgradeBtnText">版本更新</span>
-          <span id="upgradeBadge" class="hidden w-2 h-2 bg-red-500 rounded-full ml-auto"></span>
-        </button>
-      </div>
-    </aside>
+      </aside>
 
     <!-- Center: Chat -->
     <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
@@ -286,10 +275,15 @@
       </div>
       <div class="px-8 py-4 bg-white border-t border-border flex-shrink-0">
         <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
-          <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"></textarea>
-          <button onclick="send()" class="w-8 h-8 bg-brand rounded-lg text-white flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors shadow-sm">
-            <span class="w-4 h-4">↑</span></span>
-          </button>
+          <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none max-h-24 flex items-center py-1"></textarea>
+          <div id="sendBtnContainer" class="flex gap-2 flex-shrink-0">
+            <button id="cancelBtn" onclick="cancelSend()" class="hidden px-4 py-2 border border-border text-gray-600 text-sm rounded-lg hover:bg-gray-100 transition-colors">
+              取消
+            </button>
+            <button id="sendBtn" onclick="send()" class="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+              发送
+            </button>
+          </div>
         </div>
         <p class="text-[11px] text-faint mt-2 pl-1">winwork 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
       </div>
@@ -430,35 +424,158 @@
       const badge = document.getElementById('upgradeBadge');
       if (badge) badge.classList.add('hidden');
 
-      appendCallLog('检查 wind-cli 更新...');
+      // Create upgrade modal
+      const existingModal = document.getElementById('upgradeModal');
+      if (existingModal) existingModal.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'upgradeModal';
+      modal.className = 'fixed inset-0 z-[1001] bg-black/50 flex items-center justify-center';
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-[90%] shadow-2xl">
+          <h3 class="text-lg font-bold text-ink mb-4">版本更新</h3>
+          <div id="upgradeContent" class="text-sm text-muted mb-4">
+            <div class="flex items-center gap-2">
+              <div class="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
+              正在检查 wind-cli 版本...
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="this.closest('#upgradeModal').remove()" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">关闭</button>
+            <button id="upgradeDoBtn" onclick="doUpgrade()" class="hidden flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700">下载更新</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
       try {
         const info = await invoke('check_upgrade', {}, 10000);
-        if (info && info.has_update === 'true') {
-          if (confirm('检测到 wind-cli 新版本可用！\n\n点击"确定"下载最新版本。')) {
-            appendCallLog('正在更新 wind-cli...');
-            const result = await invoke('do_upgrade', {}, 30000);
-            if (result && result.ok) {
-              alert('wind-cli 已更新，请重启应用');
-              appendCallLog('wind-cli 更新成功');
-            } else {
-              alert('更新失败，请手动下载：\nhttps://github.com/wbyanclaw/wind-cli/releases/latest');
-              appendCallLog('wind-cli 更新失败: ' + (result?.stderr || 'unknown'));
-            }
-          }
+        const content = document.getElementById('upgradeContent');
+        const doBtn = document.getElementById('upgradeDoBtn');
+
+        // Check if wind-cli was found
+        if (!info || info.found === 'false') {
+          content.innerHTML = `
+            <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div class="flex items-center gap-2 text-red-700 font-medium mb-1">
+                <span class="text-lg">✗</span> wind-cli 未安装
+              </div>
+              <div class="text-sm text-red-600">
+                ${info?.reason || '请先安装 wind-cli'}
+              </div>
+              <button onclick="showInstallModal()" class="mt-3 px-3 py-1.5 bg-brand text-white text-xs rounded-lg hover:bg-blue-700">
+                前往安装
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        if (info.has_update === 'true') {
+          content.innerHTML = `
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+              <div class="flex items-center gap-2 text-amber-700 font-medium mb-1">
+                <span class="text-lg">⚠️</span> 发现新版本
+              </div>
+              <div class="text-sm text-amber-600">
+                当前版本: ${info.current_version || envState.windcliVersion || '未知'}<br>
+                最新版本: ${info.latest_version || '未知'}
+              </div>
+            </div>
+            <p class="text-xs text-faint mb-3">点击下方按钮下载并安装最新版本</p>
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-600">
+              ${info.output || ''}
+            </div>
+          `;
+          doBtn.classList.remove('hidden');
+          doBtn.dataset.hasUpdate = 'true';
         } else {
-          alert('当前已是最新版本，无需更新');
-          appendCallLog('wind-cli 已是最新版本');
+          content.innerHTML = `
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <div class="flex items-center gap-2 text-emerald-700 font-medium mb-1">
+                <span class="text-lg">✓</span> 已是最新版本
+              </div>
+              <div class="text-sm text-emerald-600">
+                当前版本: ${info.current_version || envState.windcliVersion || '未知'}
+              </div>
+            </div>
+          `;
         }
       } catch(e) {
-        alert('检查更新失败: ' + String(e));
-        appendCallLog('检查更新失败: ' + String(e));
+        const content = document.getElementById('upgradeContent');
+        content.innerHTML = `
+          <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div class="flex items-center gap-2 text-red-700 font-medium mb-1">
+              <span class="text-lg">✗</span> 检查失败
+            </div>
+            <div class="text-sm text-red-600">${escHtml(String(e))}</div>
+          </div>
+        `;
       }
+    }
+
+    async function doUpgrade() {
+      const content = document.getElementById('upgradeContent');
+      const doBtn = document.getElementById('upgradeDoBtn');
+      doBtn.disabled = true;
+      doBtn.textContent = '更新中...';
+
+      try {
+        content.innerHTML = `
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
+            正在更新 wind-cli...
+          </div>
+        `;
+
+        const result = await invoke('do_upgrade', {}, 30000);
+        if (result && result.ok) {
+          content.innerHTML = `
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <div class="flex items-center gap-2 text-emerald-700 font-medium mb-2">
+                <span class="text-lg">✓</span> 更新成功
+              </div>
+              <p class="text-sm text-emerald-600">wind-cli 已更新，请重启应用</p>
+            </div>
+          `;
+        } else {
+          content.innerHTML = `
+            <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div class="flex items-center gap-2 text-red-700 font-medium mb-2">
+                <span class="text-lg">✗</span> 更新失败
+              </div>
+              <p class="text-xs text-red-600 mb-2">${escHtml(result?.stderr || '未知错误')}</p>
+              <a href="https://github.com/wbyanclaw/wind-cli/releases/latest" target="_blank" class="text-xs text-brand hover:underline">手动下载最新版本 →</a>
+            </div>
+          `;
+        }
+      } catch(e) {
+        content.innerHTML = `
+          <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div class="flex items-center gap-2 text-red-700 font-medium mb-2">
+              <span class="text-lg">✗</span> 更新失败
+            </div>
+            <p class="text-xs text-red-600">${escHtml(String(e))}</p>
+          </div>
+        `;
+      }
+
+      if (doBtn) doBtn.remove();
     }
 
     // ── File Tree ──────────────────────────────────────────────
     async function loadFileTree() {
       const container = document.getElementById('fileTree');
       if (!container) return;
+
+      // 先显示加载状态，5秒后自动变为超时提示
+      container.innerHTML = '<div class="px-4 py-2 text-xs text-faint">加载中...</div>';
+      const loadTimeout = setTimeout(() => {
+        const existing = container.querySelector('.text-faint');
+        if (existing && existing.textContent === '加载中...') {
+          existing.parentElement.innerHTML = '<div class="px-4 py-2 text-xs text-red-500">⚠ 加载超时</div><div class="px-4 py-1 text-xs text-faint">wind-cli 可能未安装或无响应</div>';
+        }
+      }, 5000);
 
       try {
         // Get workspace files with timeout
@@ -471,6 +588,7 @@
           invoke('list_wiki'),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
         ]);
+        clearTimeout(loadTimeout);
         container.innerHTML = '';
 
         // Section: 文件 (workspace)
@@ -547,15 +665,32 @@
 
         container.appendChild(wikiSection);
       } catch(e) {
+        clearTimeout(loadTimeout);
         // Check if it's a wind-cli error with structured error data
         const errMsg = String(e);
+        let errorHtml;
         if (errMsg.includes('PATH_TRAVERSAL') || errMsg.includes('path traversal')) {
-          container.innerHTML = '<div class="px-4 py-2 text-xs text-red-600">路径穿越错误：wind-cli 检测到非法路径访问</div><div class="px-4 py-1 text-xs text-faint">请检查路径是否包含 ../ 或绝对路径</div>';
+          errorHtml = `
+            <div class="px-4 py-2 text-xs text-red-600">路径穿越错误</div>
+            <div class="px-4 py-1 text-xs text-faint mb-2">wind-cli 检测到非法路径访问</div>
+          `;
         } else if (errMsg.includes('not found') || errMsg.includes('not installed')) {
-          container.innerHTML = '<div class="px-4 py-2 text-xs text-amber-600">wind-cli 未安装或不可用</div><div class="px-4 py-1 text-xs text-faint">请先安装 wind-cli 或点击"检查环境"</div>';
+          errorHtml = `
+            <div class="px-4 py-2 text-xs text-amber-600">⚠ wind-cli 未安装</div>
+            <div class="px-4 py-1 text-xs text-faint mb-2">请先安装 wind-cli</div>
+            <button onclick="showInstallModal()" class="mx-4 mb-2 px-3 py-1.5 bg-brand text-white text-xs rounded-lg hover:bg-blue-700">安装 wind-cli</button>
+          `;
         } else {
-          container.innerHTML = '<div class="px-4 py-2 text-xs text-amber-600">wind-cli 执行出错</div><div class="px-4 py-1 text-xs text-faint">' + escHtml(errMsg.slice(0, 100)) + '</div>';
+          errorHtml = `
+            <div class="px-4 py-2 text-xs text-amber-600">⚠ wind-cli 执行出错</div>
+            <div class="px-4 py-1 text-xs text-faint mb-2">${escHtml(errMsg.slice(0, 100))}</div>
+          `;
         }
+        errorHtml += `
+          <button onclick="loadFileTree()" class="mx-4 mb-2 px-3 py-1.5 border border-border text-xs rounded-lg hover:bg-slate-50">🔄 重新加载</button>
+          <button onclick="doCheckEnv()" class="mx-4 mb-2 px-3 py-1.5 border border-border text-xs rounded-lg hover:bg-slate-50">🔍 检查环境</button>
+        `;
+        container.innerHTML = errorHtml;
         window._log && window._log('loadFileTree failed:', e);
       }
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
@@ -609,7 +744,7 @@
         const wwVer = await invoke('get_winwork_version');
         envState.winworkVersion = wwVer;
         const verEl = document.getElementById('winworkVersion');
-        if (verEl) verEl.textContent = 'v' + wwVer;
+        if (verEl) verEl.textContent = wwVer;
       } catch(e) { window._log && window._log('get_winwork_version failed:', e); }
 
       try {
@@ -618,6 +753,8 @@
         envState.windcliPath = info.path || '';
         envState.windcliVersion = info.version || '';
         window._log && window._log('windcli info:', JSON.stringify(info));
+        const wcVerEl = document.getElementById('windcliVersion');
+        if (wcVerEl) wcVerEl.textContent = info.version || '?';
       } catch(e) { envState.windcli = false; }
 
       const allReady = envState.windcli;
@@ -629,9 +766,11 @@
         statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪 <span class="text-faint ml-1">${diagInfo}</span></span>`;
         modal.classList.add('hidden');
       } else {
-        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>未就绪 <span class="text-faint ml-1">${diagInfo}</span></span>`;
-        modal.classList.remove('hidden');
-        updateModalUI();
+        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>wind-cli 未安装，点击安装 <span class="text-faint ml-1">${diagInfo}</span></span>`;
+        modal.classList.add('hidden');
+        // 点击状态栏打开安装
+        statusBar.style.cursor = 'pointer';
+        statusBar.onclick = showInstallModal;
       }
       return allReady;
     }
@@ -663,6 +802,14 @@
         if (btnText) btnText.textContent = '开始使用 winwork';
       }
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    function showInstallModal() {
+      const modal = document.getElementById('installModal');
+      if (modal) {
+        updateModalUI();
+        modal.classList.remove('hidden');
+      }
     }
 
     async function handleModalButton() {
@@ -762,7 +909,7 @@
       if (placeholder) placeholder.classList.add('hidden');
 
       // Step-by-step execution trace
-      const traceSteps = \`
+      const traceSteps = `
         <div class="space-y-0">
           <div class="flex gap-3 mb-4">
             <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div><div class="flex-1 w-px bg-border mt-1"></div></div>
@@ -784,11 +931,11 @@
             <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-green-100 border-2 border-green-300 text-green-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">5</div></div>
             <div class="flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 5 · AI 格式化回复</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">${result.ok ? '执行成功，结果已格式化' : '执行失败，请检查输入'}</div></div>
           </div>
-        </div>\`;
+        </div>`;
       if (trace) trace.innerHTML = traceSteps;
 
       // Data provenance panel
-      const sourceContent = \`
+      const sourceContent = `
         <div class="text-[11px] font-semibold text-muted mb-3 uppercase tracking-wide">原始数据溯源</div>
         <div class="space-y-3">
           <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
@@ -809,7 +956,7 @@
             <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>${result.ok ? '无路径穿越风险' : '执行异常'}</div>
             <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>无外部命令注入</div>
           </div>
-        </div>\`;
+        </div>`;
       if (source) source.innerHTML = sourceContent;
 
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
@@ -834,17 +981,6 @@
 
       // Show/hide panels
       document.getElementById('details-panel').classList.toggle('hidden', mode !== 'details');
-    }
-
-    function toggleDiagnostics() {
-      // Open DevTools with Ctrl+Shift+I
-      document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'I',
-        code: 'KeyI',
-        ctrlKey: true,
-        shiftKey: true,
-        bubbles: true
-      }));
     }
 
     function highlightJSON(obj) {
@@ -898,7 +1034,8 @@
     async function doCheckEnv() {
       const info = await invoke('check_windcli');
       const ww = await invoke('get_winwork_version');
-      let msg = `winwork: ${ww}\nwind-cli: ${info.found === 'true' ? '已安装 (' + (info.path || 'unknown') + ') v' + (info.version || '?') : '未安装'}`;
+      let cliPath = info.found === 'true' ? (info.path?.includes('/') || info.path?.includes('\\') ? info.path : 'PATH') : '未安装';
+      let msg = `winwork: ${ww}\nwind-cli: ${info.found === 'true' ? '已安装 (来自 ' + cliPath + ') v' + (info.version || '?').replace(/^wind\s*/i, '') : '未安装'}`;
       appendMessage('agent', msg, document.getElementById('messages'));
     }
 
@@ -927,10 +1064,23 @@
     }
 
     // ── Send ─────────────────────────────────────────────────
+    let _pendingAid = null;
+    let _pendingText = '';
+
     async function send() {
       const inp = document.getElementById('input');
       const text = inp.value.trim();
       if (!text) return;
+
+      // Show cancel button
+      const cancelBtn = document.getElementById('cancelBtn');
+      const sendBtn = document.getElementById('sendBtn');
+      if (cancelBtn) cancelBtn.classList.remove('hidden');
+      if (sendBtn) sendBtn.disabled = true;
+
+      // 保存文本以便取消时恢复
+      _pendingText = text;
+
       inp.value = '';
       resize(inp);
 
@@ -940,6 +1090,7 @@
       // Human message
       appendMessage('user', text, msgs);
       const aid = 'm' + Date.now();
+      _pendingAid = aid;
 
       // Thinking state
       appendAgentThinking(aid, msgs);
@@ -1016,7 +1167,45 @@
         if (bubble) {
           bubble.innerHTML = `<p>⚠️ 无法执行命令: ${escHtml(String(e))}</p>`;
         }
+      } finally {
+        // Reset buttons
+        _pendingAid = null;
+        const cancelBtn = document.getElementById('cancelBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        if (sendBtn) sendBtn.disabled = false;
       }
+    }
+
+    function cancelSend() {
+      // 隐藏取消按钮，恢复发送按钮
+      const cancelBtn = document.getElementById('cancelBtn');
+      const sendBtn = document.getElementById('sendBtn');
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      if (sendBtn) sendBtn.disabled = false;
+
+      // 移除正在思考的消息
+      if (_pendingAid) {
+        const thinkingMsg = document.getElementById(_pendingAid);
+        if (thinkingMsg) thinkingMsg.remove();
+
+        // 移除用户消息
+        const messages = document.getElementById('messages');
+        const userMsgs = messages.querySelectorAll('.msg.user');
+        if (userMsgs.length > 0) {
+          userMsgs[userMsgs.length - 1].remove();
+        }
+
+        // 恢复输入框内容
+        const inp = document.getElementById('input');
+        if (inp && _pendingText) {
+          inp.value = _pendingText;
+          resize(inp);
+          inp.focus();
+        }
+      }
+      _pendingAid = null;
+      _pendingText = '';
     }
 
     function appendMessage(role, text, container) {

@@ -348,15 +348,58 @@ pub fn check_upgrade() -> HashMap<String, String> {
             let stdout = String::from_utf8_lossy(&o.stdout).to_string();
             let stderr = String::from_utf8_lossy(&o.stderr).to_string();
 
+            // Check for update by looking for keywords in output
             let has_update = stdout.to_lowercase().contains("update")
                 || stdout.to_lowercase().contains("newer")
                 || stdout.to_lowercase().contains("available")
                 || stdout.to_lowercase().contains("upgrade");
 
+            // Parse version from output (e.g., "v0.1.10" or "current: 0.1.10, latest: 0.1.11")
+            let mut current_version = String::new();
+            let mut latest_version = String::new();
+
+            // Try to extract versions from output
+            // Pattern: looking for version numbers like 0.1.x or v0.x.x
+            for line in stdout.lines() {
+                let line_lower = line.to_lowercase();
+                if line_lower.contains("current") || line_lower.contains("your") {
+                    // Try to extract version number
+                    if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
+                        if current_version.is_empty() {
+                            current_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+                        }
+                    }
+                }
+                if line_lower.contains("latest") || line_lower.contains("new") {
+                    if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
+                        if latest_version.is_empty() {
+                            latest_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+                        }
+                    }
+                }
+            }
+
+            // If versions still empty, try single version pattern
+            if current_version.is_empty() && latest_version.is_empty() {
+                if let Some(caps) = regex::Regex::new(r"(\d+\.\d+\.\d+)").ok().and_then(|r| r.find(&stdout)) {
+                    if has_update {
+                        latest_version = caps.as_str().to_string();
+                    } else {
+                        current_version = caps.as_str().to_string();
+                    }
+                }
+            }
+
             result.insert("found".to_string(), "true".to_string());
             result.insert("has_update".to_string(), if has_update { "true" } else { "false" }.to_string());
             result.insert("output".to_string(), stdout);
             result.insert("error".to_string(), stderr);
+            if !current_version.is_empty() {
+                result.insert("current_version".to_string(), current_version);
+            }
+            if !latest_version.is_empty() {
+                result.insert("latest_version".to_string(), latest_version);
+            }
             result.insert(
                 "url".to_string(),
                 "https://github.com/wbyanclaw/wind-cli/releases/latest".to_string(),

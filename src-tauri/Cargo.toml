@@ -1,6 +1,6 @@
 [package]
 name = "winwork"
-version = "0.2.21"
+version = "0.2.22"
 description = "AI Agent file management demo powered by wind-cli"
 authors = ["wind-cli team"]
 edition = "2021"
@@ -27,6 +27,7 @@ tempfile = "3"
 dirs = "5"
 directories = "5"
 which = "6"
+regex = "1"
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 
