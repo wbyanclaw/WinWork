@@ -6,17 +6,13 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_BASE_URL: &str = "https://df.dawnloadai.com:9888/v1";
 
 #[derive(Debug, Clone)]
-pub struct MiniMaxClient {
+pub struct ChatClient {
     base_url: String,
     api_key: String,
     model: String,
 }
 
-impl MiniMaxClient {
-    /// Create a new client.
-    /// `base_url`: OpenAI-compatible endpoint base (e.g. "https://api.openai.com/v1" or MiniMax endpoint).
-    /// `api_key`: API key for authentication.
-    /// `model`: Model name to use (e.g. "gpt-4", "MiniMax-M2.7-highspeed").
+impl ChatClient {
     pub fn new(api_key: String, base_url: String, model: Option<String>) -> Self {
         Self {
             base_url: if base_url.is_empty() {
@@ -29,7 +25,7 @@ impl MiniMaxClient {
         }
     }
 
-    pub async fn chat(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, MiniMaxError> {
+    pub async fn chat(&self, messages: Vec<ChatMessage>) -> Result<ChatResponse, ChatError> {
         let client = reqwest::Client::new();
 
         let request = ChatRequest {
@@ -46,18 +42,18 @@ impl MiniMaxClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| MiniMaxError::Network(e.to_string()))?;
+            .map_err(|e| ChatError::Network(e.to_string()))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(MiniMaxError::Api(status.as_u16(), error_text));
+            return Err(ChatError::Api(status.as_u16(), error_text));
         }
 
         response
             .json::<ChatResponse>()
             .await
-            .map_err(|e| MiniMaxError::Parse(e.to_string()))
+            .map_err(|e| ChatError::Parse(e.to_string()))
     }
 }
 
@@ -89,24 +85,25 @@ pub struct Choice {
 
 #[derive(Debug, Deserialize)]
 pub struct ResponseMessage {
-    #[allow(dead_code)]
     pub role: String,
     pub content: String,
 }
 
 #[derive(Debug)]
-pub enum MiniMaxError {
+pub enum ChatError {
     Network(String),
     Api(u16, String),
     Parse(String),
 }
 
-impl std::fmt::Display for MiniMaxError {
+impl std::fmt::Display for ChatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MiniMaxError::Network(msg) => write!(f, "Network error: {}", msg),
-            MiniMaxError::Api(status, msg) => write!(f, "API error {}: {}", status, msg),
-            MiniMaxError::Parse(msg) => write!(f, "Parse error: {}", msg),
+            ChatError::Network(msg) => write!(f, "Network error: {}", msg),
+            ChatError::Api(status, msg) => write!(f, "API error {}: {}", status, msg),
+            ChatError::Parse(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
+
+impl std::error::Error for ChatError {}
