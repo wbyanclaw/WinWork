@@ -118,6 +118,16 @@ fn check_llm_wiki() -> HashMap<String, String> {
 }
 
 #[tauri::command]
+fn check_upgrade() -> HashMap<String, String> {
+    wind::check_upgrade()
+}
+
+#[tauri::command]
+fn do_upgrade() -> WindResult {
+    wind::do_upgrade()
+}
+
+#[tauri::command]
 fn open_url(url: String) -> WindResult {
     match opener_open_url(&url, None::<&str>) {
         Ok(_) => WindResult {
@@ -441,6 +451,8 @@ pub fn run() {
             list_workspace,
             check_windcli,
             check_llm_wiki,
+            check_upgrade,
+            do_upgrade,
             open_url,
             trigger_install,
             wiki_status,

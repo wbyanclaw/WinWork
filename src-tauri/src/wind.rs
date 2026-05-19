@@ -323,3 +323,73 @@ pub fn check_llm_wiki() -> HashMap<String, String> {
     }
     result
 }
+
+/// Check for wind-cli upgrades via `wind upgrade --check`
+pub fn check_upgrade() -> HashMap<String, String> {
+    let mut result = HashMap::new();
+
+    let windcli = match find_windcli() {
+        Some(p) => p,
+        None => {
+            result.insert("found".to_string(), "false".to_string());
+            result.insert("reason".to_string(), "wind-cli not found".to_string());
+            return result;
+        }
+    };
+
+    let output = StdCommand::new(&windcli)
+        .args(["upgrade", "--check"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    match output {
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&o.stderr).to_string();
+
+            let has_update = stdout.to_lowercase().contains("update")
+                || stdout.to_lowercase().contains("newer")
+                || stdout.to_lowercase().contains("available")
+                || stdout.to_lowercase().contains("upgrade");
+
+            result.insert("found".to_string(), "true".to_string());
+            result.insert("has_update".to_string(), if has_update { "true" } else { "false" }.to_string());
+            result.insert("output".to_string(), stdout);
+            result.insert("error".to_string(), stderr);
+            result.insert(
+                "url".to_string(),
+                "https://github.com/wbyanclaw/wind-cli/releases/latest".to_string(),
+            );
+        }
+        Err(e) => {
+            result.insert("found".to_string(), "false".to_string());
+            result.insert("reason".to_string(), format!("Failed to check upgrade: {}", e));
+        }
+    }
+    result
+}
+
+/// Trigger wind-cli self-upgrade via `wind upgrade`
+pub fn do_upgrade() -> WindResult {
+    let windcli = match find_windcli() {
+        Some(p) => p,
+        None => {
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: "wind-cli not found".to_string(),
+                exit_code: -1,
+                data: None,
+            };
+        }
+    };
+
+    let output = StdCommand::new(&windcli)
+        .args(["upgrade"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    build_wind_result(output)
+}

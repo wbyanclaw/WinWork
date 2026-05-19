@@ -295,6 +295,10 @@
           <span class="w-3.5 h-3.5">⚙️</span></span>API 设置
         </button>
         <div id="apiKeyStatus" class="px-2 py-1 text-[10px] text-faint"></div>
+        <button onclick="showUpgradeModal()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors mt-1">
+          <span class="w-3.5 h-3.5">🔄</span></span><span id="upgradeBtnText">版本更新</span>
+          <span id="upgradeBadge" class="hidden w-2 h-2 bg-red-500 rounded-full ml-auto"></span>
+        </button>
       </div>
     </aside>
 
@@ -520,6 +524,36 @@
       } else {
         status.textContent = '设置API';
         btn.classList.remove('text-emerald-600');
+      }
+    }
+
+    // ── Upgrade Check ───────────────────────────────────────────
+    async function showUpgradeModal() {
+      const badge = document.getElementById('upgradeBadge');
+      if (badge) badge.classList.add('hidden');
+
+      appendCallLog('检查 wind-cli 更新...');
+      try {
+        const info = await invoke('check_upgrade', {}, 10000);
+        if (info && info.has_update === 'true') {
+          if (confirm('检测到 wind-cli 新版本可用！\n\n点击"确定"下载最新版本。')) {
+            appendCallLog('正在更新 wind-cli...');
+            const result = await invoke('do_upgrade', {}, 30000);
+            if (result && result.ok) {
+              alert('wind-cli 已更新，请重启应用');
+              appendCallLog('wind-cli 更新成功');
+            } else {
+              alert('更新失败，请手动下载：\nhttps://github.com/wbyanclaw/wind-cli/releases/latest');
+              appendCallLog('wind-cli 更新失败: ' + (result?.stderr || 'unknown'));
+            }
+          }
+        } else {
+          alert('当前已是最新版本，无需更新');
+          appendCallLog('wind-cli 已是最新版本');
+        }
+      } catch(e) {
+        alert('检查更新失败: ' + String(e));
+        appendCallLog('检查更新失败: ' + String(e));
       }
     }
 
@@ -1515,6 +1549,26 @@
         // Continue anyway - modal will handle missing env
         envState = { windcli: false, llmwiki: false };
       }
+
+      // Check for wind-cli upgrades (async, don't block init)
+      setTimeout(async () => {
+        try {
+          const upgradeInfo = await invoke('check_upgrade', {}, 5000);
+          window._log && window._log('upgrade check:', JSON.stringify(upgradeInfo));
+          if (upgradeInfo && upgradeInfo.found === 'true') {
+            const badge = document.getElementById('upgradeBadge');
+            const btnText = document.getElementById('upgradeBtnText');
+            if (badge && upgradeInfo.has_update === 'true') {
+              badge.classList.remove('hidden');
+              if (btnText) btnText.textContent = '版本更新 ⚠️';
+            } else if (badge) {
+              badge.classList.add('hidden');
+            }
+          }
+        } catch(e) {
+          window._log && window._log('upgrade check failed:', e);
+        }
+      }, 2000);
 
       // Load app state with timeout
       try {
