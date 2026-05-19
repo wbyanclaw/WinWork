@@ -149,7 +149,8 @@ fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> Wi
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let exit_code = out.status.code().unwrap_or(-1);
             let ok = out.status.success();
-            let data = if ok && !stdout.trim().is_empty() {
+            // Always try to parse JSON from stdout - even on failure (wind-cli may return error JSON)
+            let data = if !stdout.trim().is_empty() {
                 serde_json::from_str(&stdout).ok()
             } else {
                 None
