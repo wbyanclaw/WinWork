@@ -2,6 +2,7 @@
 class Logger {
   constructor(maxSize = 500) {
     this.buffer = [];
+    this.operations = [];
     this.maxSize = maxSize;
     this.listeners = [];
   }
@@ -10,7 +11,7 @@ class Logger {
     const entry = {
       timestamp: new Date().toISOString(),
       level,      // 'info' | 'warn' | 'error' | 'debug'
-      source,    // 'app' | 'api' | 'wind' | 'ui'
+      source,    // 'app' | 'api' | 'wind' | 'ui' | 'user'
       message
     };
 
@@ -22,8 +23,15 @@ class Logger {
     // 通知监听器
     this.listeners.forEach(fn => fn(entry));
 
-    // 持久化
-    this.persist(entry);
+    // 控制台输出
+    const prefix = `[${source.toUpperCase()}]`;
+    if (level === 'error') {
+      console.error(prefix, message);
+    } else if (level === 'warn') {
+      console.warn(prefix, message);
+    } else {
+      console.log(prefix, message);
+    }
 
     return entry;
   }
@@ -34,11 +42,7 @@ class Logger {
   debug(source, message) { return this.log('debug', source, message); }
 
   getBuffer() { return this.buffer; }
-
-  getFiltered(level) {
-    if (level === 'all') return this.buffer;
-    return this.buffer.filter(e => e.level === level);
-  }
+  getFiltered(level) { return this.buffer.filter(e => e.level === level); }
 
   search(query) {
     return this.buffer.filter(e =>
@@ -53,21 +57,22 @@ class Logger {
     };
   }
 
-  async persist(entry) {
-    try {
-      const date = new Date().toISOString().split('T')[0];
-      const key = `logs/${date}`;
-      const logs = (await storage.load(key)) || [];
-      logs.push(entry);
-      if (logs.length > 1000) logs.shift();
-      await storage.save(key, logs);
-    } catch (e) {
-      console.error('Failed to persist log:', e);
-    }
-  }
-
   clear() {
     this.buffer = [];
+    this.operations = [];
+  }
+
+  // 操作记录（用于时间线）
+  addOperation(type, detail) {
+    this.operations.push({
+      timestamp: new Date().toISOString(),
+      type,
+      detail
+    });
+  }
+
+  getOperations() {
+    return this.operations;
   }
 }
 

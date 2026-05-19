@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command as StdCommand, Stdio};
+use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
@@ -17,6 +18,203 @@ fn add_no_window(cmd: &mut StdCommand) -> &mut StdCommand {
 }
 
 use which::which;
+use tauri::AppHandle;
+
+/// Shared upgrade progress state
+static UPGRADE_PROGRESS: std::sync::LazyLock<Arc<Mutex<UpgradeProgress>>> =
+    std::sync::LazyLock::new(|| Arc::new(Mutex::new(UpgradeProgress::default())));
+
+#[derive(Default)]
+struct UpgradeProgress {
+    stage: String,
+    percent: u32,
+    log: Vec<String>,
+}
+
+fn set_progress(stage: &str, percent: u32, log: Option<&str>) {
+    let mut progress = UPGRADE_PROGRESS.lock().unwrap();
+    progress.stage = stage.to_string();
+    progress.percent = percent;
+    if let Some(l) = log {
+        progress.log.push(l.to_string());
+        // Keep only last 20 log entries
+        if progress.log.len() > 20 {
+            progress.log.remove(0);
+        }
+    }
+}
+
+fn get_progress() -> (String, u32, Vec<String>) {
+    let progress = UPGRADE_PROGRESS.lock().unwrap();
+    (progress.stage.clone(), progress.percent, progress.log.clone())
+}
+
+/// Get current upgrade progress (for polling from frontend).
+pub fn get_upgrade_progress() -> String {
+    let (stage, percent, log) = get_progress();
+    serde_json::json!({
+        "stage": stage,
+        "percent": percent,
+        "log": log
+    }).to_string()
+}
+
+/// Run upgrade with progress tracking and Tauri events.
+pub fn do_upgrade_with_progress(_app: &AppHandle) -> WindResult {
+    set_progress("准备中", 5, Some("开始检查 wind-cli 版本..."));
+
+    let windcli = match crate::wind::find_windcli() {
+        Some(p) => p,
+        None => {
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: "wind-cli not found".to_string(),
+                exit_code: -1,
+                data: None,
+            };
+        }
+    };
+
+    let version_before = crate::wind::get_windcli_version(&windcli);
+    set_progress("检查版本", 10, Some(&format!("当前版本: {}", version_before)));
+
+    // Check what install command is needed
+    set_progress("获取更新信息", 20, Some("正在检查最新版本..."));
+    let check_output = add_no_window(&mut StdCommand::new(&windcli))
+        .args(["upgrade", "--check"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    let check_output = match check_output {
+        Ok(o) => o,
+        Err(e) => {
+            set_progress("错误", 100, Some(&format!("检查更新失败: {}", e)));
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: format!("检查更新失败: {}", e),
+                exit_code: -1,
+                data: None,
+            };
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&check_output.stdout).to_string();
+
+    // Parse JSON to get install command
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        if let Some(install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
+            set_progress("下载中", 30, Some("正在下载最新版本..."));
+
+            // Execute the install command via cmd /c
+            let full_cmd = format!(
+                "powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"",
+                install_cmd
+            );
+
+            set_progress("安装中", 50, Some("正在安装新版本..."));
+
+            let ps_output = add_no_window(&mut StdCommand::new("cmd"))
+                .args(["/c", &full_cmd])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output();
+
+            match ps_output {
+                Ok(ps_out) => {
+                    let ps_stdout = String::from_utf8_lossy(&ps_out.stdout).to_string();
+                    let ps_stderr = String::from_utf8_lossy(&ps_out.stderr).to_string();
+                    let ps_ok = ps_out.status.success();
+
+                    set_progress(
+                        "验证中",
+                        80,
+                        Some(if ps_ok { "安装完成，正在验证..." } else { "安装执行完成" }),
+                    );
+
+                    // Check new version
+                    let new_version = crate::wind::find_windcli().and_then(|p| {
+                        let v = crate::wind::get_windcli_version(&p);
+                        if v != version_before {
+                            Some((p, v))
+                        } else {
+                            None
+                        }
+                    });
+
+                    set_progress("完成", 100, Some("验证完成"));
+
+                    if let Some((path, version)) = new_version {
+                        WindResult {
+                            ok: true,
+                            stdout: format!("升级成功! {} -> {}", version_before, version),
+                            stderr: ps_stderr,
+                            exit_code: 0,
+                            data: Some(serde_json::json!({
+                                "version": version,
+                                "path": path
+                            })),
+                        }
+                    } else {
+                        WindResult {
+                            ok: ps_ok,
+                            stdout: format!("安装脚本执行{}", if ps_ok { "完成" } else { "失败" }),
+                            stderr: format!("stdout: {}\nstderr: {}", ps_stdout, ps_stderr),
+                            exit_code: ps_out.status.code().unwrap_or(-1),
+                            data: None,
+                        }
+                    }
+                }
+                Err(e) => {
+                    set_progress("错误", 100, Some(&format!("执行安装脚本失败: {}", e)));
+                    WindResult {
+                        ok: false,
+                        stdout: stdout,
+                        stderr: format!("执行安装脚本失败: {}", e),
+                        exit_code: -1,
+                        data: None,
+                    }
+                }
+            }
+        } else if json.get("upgrade_supported") == Some(&serde_json::Value::Bool(false)) {
+            // Upgrade not supported
+            let current = json.get("current_version").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let latest = json.get("latest_version").and_then(|v| v.as_str()).unwrap_or("unknown");
+            set_progress("不支持", 100, Some("当前版本不支持自动升级"));
+            WindResult {
+                ok: true,
+                stdout: format!("当前版本 {}，最新版本 {}。wind-cli {} 不支持自动升级，需手动下载安装", current, latest, current),
+                stderr: String::new(),
+                exit_code: 0,
+                data: Some(serde_json::json!({
+                    "current_version": current,
+                    "latest_version": latest,
+                    "manual_upgrade": true
+                })),
+            }
+        } else {
+            set_progress("完成", 100, Some("检查完成"));
+            WindResult {
+                ok: true,
+                stdout: stdout,
+                stderr: String::new(),
+                exit_code: 0,
+                data: None,
+            }
+        }
+    } else {
+        set_progress("完成", 100, Some("检查完成"));
+        WindResult {
+            ok: true,
+            stdout: stdout,
+            stderr: String::new(),
+            exit_code: 0,
+            data: None,
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WindResult {
@@ -106,7 +304,7 @@ pub fn find_windcli() -> Option<String> {
     None
 }
 
-fn get_windcli_path() -> String {
+pub fn get_windcli_path() -> String {
     find_windcli().unwrap_or_else(|| "windcli".to_string())
 }
 
@@ -454,7 +652,7 @@ pub fn check_upgrade() -> HashMap<String, String> {
     result
 }
 
-/// Trigger wind-cli self-upgrade via `wind upgrade`
+/// Trigger wind-cli self-upgrade via install script
 pub fn do_upgrade() -> WindResult {
     let windcli = match find_windcli() {
         Some(p) => p,
@@ -469,34 +667,172 @@ pub fn do_upgrade() -> WindResult {
         }
     };
 
-    let output = add_no_window(&mut StdCommand::new(&windcli))
-        .args(["upgrade"])
+    // Get version BEFORE upgrade
+    let version_before = get_windcli_version(&windcli);
+
+    // First check what install command is needed
+    let check_output = add_no_window(&mut StdCommand::new(&windcli))
+        .args(["upgrade", "--check"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output();
 
-    let result = build_wind_result(output);
+    match check_output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
-    // Verify upgrade was successful by running wind --version
-    if result.ok {
-        let version_output = add_no_window(&mut StdCommand::new(&windcli))
-            .args(["--version"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
+            // Parse JSON to get install command
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
+                    // Execute the install command via cmd /c (allows window to show)
+                    // Use cmd with /c to run the PowerShell command
+                    let full_cmd = format!("powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"", install_cmd);
 
-        if let Ok(v) = version_output {
-            let stdout = String::from_utf8_lossy(&v.stdout).to_string();
-            // Update stdout to include version info
-            return WindResult {
-                ok: true,
-                stdout: format!("{} (当前版本: {})", result.stdout.trim(), stdout.trim()),
-                stderr: result.stderr,
-                exit_code: result.exit_code,
-                data: None,
-            };
+                    let ps_output = add_no_window(&mut StdCommand::new("cmd"))
+                        .args(["/c", &full_cmd])
+                        .stdout(Stdio::piped())
+                        .stderr(Stdio::piped())
+                        .output();
+
+                    match ps_output {
+                        Ok(ps_out) => {
+                            let ps_stdout = String::from_utf8_lossy(&ps_out.stdout).to_string();
+                            let ps_stderr = String::from_utf8_lossy(&ps_out.stderr).to_string();
+                            let ps_ok = ps_out.status.success();
+
+                            // Check new version
+                            let new_version = find_windcli()
+                                .and_then(|p| {
+                                    let v = get_windcli_version(&p);
+                                    if v != version_before { Some((p, v)) } else { None }
+                                });
+
+                            if let Some((path, version)) = new_version {
+                                WindResult {
+                                    ok: true,
+                                    stdout: format!("升级成功! {} -> {}", version_before, version),
+                                    stderr: ps_stderr,
+                                    exit_code: 0,
+                                    data: Some(serde_json::json!({
+                                        "version": version,
+                                        "path": path
+                                    })),
+                                }
+                            } else {
+                                WindResult {
+                                    ok: ps_ok,
+                                    stdout: format!("安装脚本执行{}", if ps_ok { "完成" } else { "失败" }),
+                                    stderr: format!("stdout: {}\nstderr: {}", ps_stdout, ps_stderr),
+                                    exit_code: ps_out.status.code().unwrap_or(-1),
+                                    data: None,
+                                }
+                            }
+                        }
+                        Err(e) => WindResult {
+                            ok: false,
+                            stdout: stdout,
+                            stderr: format!("执行安装脚本失败: {}", e),
+                            exit_code: -1,
+                            data: None,
+                        },
+                    }
+                } else if json.get("upgrade_supported") == Some(&serde_json::Value::Bool(false)) {
+                    // Upgrade not supported, just check
+                    let current = json.get("current_version").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    let latest = json.get("latest_version").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    WindResult {
+                        ok: true,
+                        stdout: format!("当前版本 {}，最新版本 {}。wind-cli {} 不支持自动升级，需手动下载安装", current, latest, current),
+                        stderr: String::new(),
+                        exit_code: 0,
+                        data: Some(serde_json::json!({
+                            "current_version": current,
+                            "latest_version": latest,
+                            "manual_upgrade": true
+                        })),
+                    }
+                } else {
+                    WindResult {
+                        ok: true,
+                        stdout: stdout,
+                        stderr: String::new(),
+                        exit_code: 0,
+                        data: None,
+                    }
+                }
+            } else {
+                WindResult {
+                    ok: true,
+                    stdout: stdout,
+                    stderr: String::new(),
+                    exit_code: 0,
+                    data: None,
+                }
+            }
         }
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("检查更新失败: {}", e),
+            exit_code: -1,
+            data: None,
+        },
+    }
+}
+
+/// Get wind-cli version by running --version
+fn get_windcli_version(path: &str) -> String {
+    if let Ok(output) = add_no_window(&mut StdCommand::new(path))
+        .args(["--version"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+    {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+/// Execute wind-cli with stdin input (for write commands).
+pub fn run_wind_with_input(args: &[&str], input: &str) -> WindResult {
+    let wind_path = get_windcli_path();
+
+    let mut child = add_no_window(&mut StdCommand::new(&wind_path))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn wind-cli");
+
+    // Write stdin
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(input.as_bytes());
     }
 
-    result
+    let output = child.wait_with_output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let exit_code = out.status.code().unwrap_or(-1);
+            let ok = out.status.success();
+            let data = if !stdout.trim().is_empty() {
+                serde_json::from_str(&stdout).ok()
+            } else {
+                None
+            };
+            WindResult { ok, stdout, stderr, exit_code, data }
+        }
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("Failed to execute windcli: {}", e),
+            exit_code: -1,
+            data: None,
+        },
+    }
 }

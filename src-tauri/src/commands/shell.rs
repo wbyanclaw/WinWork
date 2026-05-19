@@ -26,7 +26,8 @@ impl From<WindResult> for CommandResult {
 }
 
 /// Run a wind-cli command with structured args.
-/// Handles 'ls' specially by prepending the workspace path.
+/// wind-cli commands are designed to work relative to the workspace root,
+/// so we don't need to prepend paths for most commands.
 pub fn run_command_impl(args: Vec<String>) -> CommandResult {
     if args.is_empty() {
         return CommandResult {
@@ -38,19 +39,27 @@ pub fn run_command_impl(args: Vec<String>) -> CommandResult {
         };
     }
 
-    let first_arg = args[0].to_lowercase();
-    if first_arg == "ls" {
-        let workspace = crate::wind::get_workspace_path();
-        let mut ls_args: Vec<&str> = vec!["--json", "ls", &workspace];
-        for arg in args.iter().skip(1) {
-            ls_args.push(arg);
-        }
-        eprintln!("[DIAGNOSTIC] run_command_impl: wind {}", ls_args.join(" "));
-        let result = run_wind(&ls_args);
-        return result.into();
-    }
-
     let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     eprintln!("[DIAGNOSTIC] run_command_impl: wind {}", parts.join(" "));
     run_wind(&parts).into()
+}
+
+/// Run a wind-cli command with stdin input (for write commands).
+pub fn run_command_with_stdin_impl(args: Vec<String>, stdin: String) -> CommandResult {
+    if args.is_empty() {
+        return CommandResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "No command provided".to_string(),
+            exit_code: 1,
+            data: None,
+        };
+    }
+
+    let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    eprintln!("[DIAGNOSTIC] run_command_with_stdin: wind {} (stdin {} bytes)", parts.join(" "), stdin.len());
+
+    // Use wind.rs's run_wind_with_input to handle stdin properly
+    crate::wind::run_wind_with_input(&parts, &stdin).into()
 }

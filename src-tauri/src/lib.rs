@@ -7,8 +7,9 @@ pub mod error;
 pub mod state;
 pub mod wind;
 
-use crate::commands::shell::{run_command_impl, CommandResult};
+use crate::commands::shell::{run_command_impl, run_command_with_stdin_impl, CommandResult};
 use crate::wind::WindResult;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::open_url as opener_open_url;
 
@@ -16,6 +17,47 @@ use tauri_plugin_opener::open_url as opener_open_url;
 #[tauri::command]
 fn run_command(args: Vec<String>) -> CommandResult {
     run_command_impl(args)
+}
+
+/// Execute wind-cli command with stdin input (for write commands).
+#[tauri::command]
+fn run_command_with_stdin(args: Vec<String>, stdin: String) -> CommandResult {
+    run_command_with_stdin_impl(args, stdin)
+}
+
+/// Check for wind-cli upgrades.
+#[tauri::command]
+fn check_upgrade() -> WindResult {
+    let result = crate::wind::check_upgrade();
+    WindResult {
+        ok: result.get("found").map(|v| v == "true").unwrap_or(false),
+        stdout: result.get("output").cloned().unwrap_or_default(),
+        stderr: result.get("error").cloned().unwrap_or_default(),
+        exit_code: 0,
+        data: Some(serde_json::to_value(&result).unwrap_or_default()),
+    }
+}
+
+/// Trigger wind-cli upgrade in background thread with progress events.
+#[tauri::command]
+async fn do_upgrade(app: AppHandle) -> Result<(), String> {
+    let app_clone = app.clone();
+
+    // Spawn upgrade in background thread
+    std::thread::spawn(move || {
+        let result = crate::wind::do_upgrade_with_progress(&app_clone);
+
+        // Emit completion event
+        let _ = app_clone.emit("upgrade-complete", &result);
+    });
+
+    Ok(())
+}
+
+/// Get upgrade progress stream (for polling).
+#[tauri::command]
+async fn get_upgrade_progress() -> String {
+    crate::wind::get_upgrade_progress()
 }
 
 /// Read file content from the workspace.
@@ -62,6 +104,12 @@ fn get_workspace_path() -> String {
 #[tauri::command]
 fn get_wiki_path() -> String {
     crate::wind::get_wiki_path()
+}
+
+/// Get winwork version from Cargo.toml.
+#[tauri::command]
+fn get_winwork_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Save state data with a given key.
@@ -128,6 +176,23 @@ fn delete_workspace(name: String) -> Result<(), String> {
     crate::state::delete_workspace(&name)
 }
 
+/// Save chat history.
+#[tauri::command]
+fn save_chat_history(messages: Vec<serde_json::Value>) -> Result<(), String> {
+    crate::state::save_state("chat_history.json", &serde_json::json!({ "messages": messages }))
+}
+
+/// Load chat history.
+#[tauri::command]
+fn load_chat_history() -> Result<Vec<serde_json::Value>, String> {
+    let data = crate::state::load_state("chat_history.json")?;
+    if let Some(msgs) = data.get("messages").and_then(|v| v.as_array()) {
+        Ok(msgs.clone())
+    } else {
+        Ok(vec![])
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -137,11 +202,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Bridge commands
             run_command,
+            run_command_with_stdin,
+            do_upgrade,
+            check_upgrade,
+            get_upgrade_progress,
             read_file,
             list_files,
             select_folder,
             get_workspace_path,
             get_wiki_path,
+            get_winwork_version,
             save_state,
             load_state,
             // Utility
@@ -150,6 +220,8 @@ pub fn run() {
             ensure_workspace_dir,
             list_workspaces,
             delete_workspace,
+            save_chat_history,
+            load_chat_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

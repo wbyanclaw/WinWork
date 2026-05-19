@@ -3,41 +3,135 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>winwork</title>
+  <title>WinWork</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Title Bar -->
+  <header class="title-bar" data-tauri-drag-region>
+    <div class="title-bar-left" data-tauri-drag-region>
+      <div class="app-icon">⚡</div>
+      <span class="app-title" data-tauri-drag-region>WinWork</span>
+    </div>
+
+    <div class="title-bar-center" data-tauri-drag-region>
+      <span id="env-status" class="env-status"></span>
+    </div>
+
+    <div class="title-bar-right">
+      <div class="version-info">
+        <span class="version-badge" id="winwork-version" title="winwork 版本">winwork</span>
+        <span class="version-badge clickable" id="windcli-version" title="wind-cli 版本 (点击检查升级)" onclick="app.checkUpgrade()">wind-cli</span>
+        <span id="update-indicator" class="update-indicator hidden" title="有新版本可用 (点击升级)" onclick="app.performUpgrade()">●</span>
+      </div>
+      <button class="title-btn" onclick="app.openSettings()" title="API 设置">⚙️</button>
+      <button class="title-btn" onclick="app.openDebug()" title="诊断/日志">🔧</button>
+      <div class="window-controls">
+        <button class="win-btn" onclick="winMinimize()" title="最小化">─</button>
+        <button class="win-btn" onclick="winMaximize()" title="最大化">□</button>
+        <button class="win-btn close" onclick="winClose()" title="关闭">×</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
   <div class="app-container">
-    <aside id="sidebar" class="sidebar"></aside>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">文件</span>
+        <div class="sidebar-actions">
+          <button class="icon-btn" onclick="refreshTree()" title="刷新">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          </button>
+          <button class="icon-btn" onclick="openInExplorer()" title="在文件管理器中打开">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </button>
+        </div>
+      </div>
+      <div id="file-tree-root" class="file-tree"></div>
+      <div class="sidebar-footer">
+        <button class="sidebar-btn" onclick="app.newChat()">
+          <span class="icon">✨</span>
+          <span class="label">新对话</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
     <main class="main">
-      <div id="debug-view" class="debug-view hidden"></div>
+      <!-- Debug View -->
+      <div id="debug-view" class="debug-view hidden">
+        <div class="debug-header">
+          <button class="back-btn" onclick="app.closeDebug()">← 返回对话</button>
+          <h2>调试视图</h2>
+          <button class="clear-btn" onclick="app.clearLogs()">清除日志</button>
+        </div>
+        <div class="debug-tabs">
+          <button class="tab active" data-tab="timeline">操作步骤</button>
+          <button class="tab" data-tab="logs">实时日志</button>
+          <button class="tab" data-tab="env">环境信息</button>
+        </div>
+        <div class="debug-content">
+          <div id="tab-timeline" class="tab-content"></div>
+          <div id="tab-logs" class="tab-content hidden"></div>
+          <div id="tab-env" class="tab-content hidden"></div>
+        </div>
+      </div>
+
+      <!-- Chat View -->
       <div id="messages" class="messages"></div>
+
+      <!-- Input Area -->
       <footer class="input-area">
         <textarea id="input" placeholder="描述你的需求..." rows="1"></textarea>
-        <button id="send-btn" onclick="app.send()">发送</button>
+        <button id="send-btn" onclick="app.send()">
+          <span>发送</span>
+        </button>
       </footer>
     </main>
+  </div>
+
+  <!-- Upgrade Modal -->
+  <div id="upgrade-modal" class="modal hidden">
+    <div class="modal-content upgrade-modal-content">
+      <div class="modal-header">
+        <h2>🔄 wind-cli 升级</h2>
+        <button class="close-btn" onclick="app.closeUpgradeModal()">×</button>
+      </div>
+      <div class="upgrade-body">
+        <div class="upgrade-version-info" id="upgrade-version-info"></div>
+        <div class="upgrade-progress-container">
+          <div class="upgrade-progress-bar" id="upgrade-progress-bar"></div>
+        </div>
+        <div class="upgrade-status" id="upgrade-status">正在检查更新...</div>
+        <div class="upgrade-logs" id="upgrade-logs"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Settings Modal -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-content">
-      <h2>设置</h2>
+      <div class="modal-header">
+        <h2>API 设置</h2>
+        <button class="close-btn" onclick="app.closeSettings()">×</button>
+      </div>
       <div class="form-group">
         <label>Base URL</label>
-        <input type="text" id="api-base-url" placeholder="https://...">
+        <input type="text" id="api-base-url" placeholder="https://platform.minimax.com/v1">
       </div>
       <div class="form-group">
         <label>API Key</label>
-        <input type="password" id="api-key" placeholder="sk-...">
+        <input type="password" id="api-key" placeholder="输入你的 API Key">
       </div>
       <div class="form-group">
         <label>Model</label>
-        <input type="text" id="api-model" placeholder="MiniMax-M2.7-highspeed">
+        <input type="text" id="api-model" placeholder="abab6.5s-chat">
       </div>
       <div class="modal-actions">
-        <button onclick="app.closeSettings()">取消</button>
-        <button onclick="app.saveSettings()">保存</button>
+        <button class="btn-secondary" onclick="app.closeSettings()">取消</button>
+        <button class="btn-primary" onclick="app.saveSettings()">保存</button>
       </div>
     </div>
   </div>
@@ -52,6 +146,7 @@
   <script src="js/core/api.js"></script>
   <script src="js/ui/status.js"></script>
   <script src="js/ui/sidebar.js"></script>
+  <script src="js/ui/file-tree.js"></script>
   <script src="js/ui/chat.js"></script>
   <script src="js/ui/cards.js"></script>
   <script src="js/ui/debug.js"></script>
