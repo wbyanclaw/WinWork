@@ -1,18 +1,14 @@
+// Tauri integration - exposes invoke globally
 const { invoke } = window.__TAURI__.core;
+window.invoke = invoke;
 
-let greetInputEl;
-let greetMsgEl;
-
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsgEl.textContent = await invoke("greet", { name: greetInputEl.value });
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
+// Log unhandled errors
+window.addEventListener('error', function (e) {
+  console.error('JS ERROR:', e.message, '@', e.filename, 'line', e.lineno);
 });
+
+window.addEventListener('unhandledrejection', function (e) {
+  console.error('UNHANDLED PROMISE REJECTION:', String(e.reason));
+});
+
+console.log('[winwork] main.js loaded');

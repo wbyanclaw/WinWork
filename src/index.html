@@ -5,263 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>winwork</title>
   <link rel="stylesheet" href="styles.css">
-  <script>
-    window._logBuffer = [];
-    window._debugVisible = false;
-    window._log = function() {
-      var args = Array.from(arguments);
-      var ts = new Date().toISOString().split('T')[1].slice(0,8);
-      var msg = '[winwork ' + ts + '] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-      console.log.apply(console, arguments);
-      window._logBuffer.push({ts, msg, type: 'info'});
-      if (window._logBuffer.length > 200) window._logBuffer.shift();
-    };
-    window._log('SCRIPT: loaded');
-  </script>
-  <script>
-    (function() {
-      try {
-        if (typeof lucide !== 'undefined') { window._lucideReady = true; return; }
-      } catch(e) {}
-      var script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
-      script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded from CDN'); };
-      script.onerror = function() {
-        window._lucideReady = false;
-        window._log && window._log('LUCIDE: failed - using emoji fallback');
-        var modalBtnIcon = document.getElementById('modal-btn-icon');
-        if (modalBtnIcon && !modalBtnIcon.textContent) { modalBtnIcon.textContent = '⚡'; }
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
-  <script>
-    tailwind.config = {
-      theme: { extend: { colors: { brand: '#1d4ed8', brandLight: '#eff6ff', ink: '#0f172a', muted: '#64748b', faint: '#94a3b8', border: '#e2e8f0', success: '#059669', successBg: '#ecfdf5' } } }
-    };
-  </script>
-  <style>
-    body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
-    #rightPanel { transform: translateX(100%); transition: transform 0.3s ease; position: absolute; right: 0; top: 0; bottom: 0; z-index: 50; box-shadow: -4px 0 12px rgba(0,0,0,0.1); }
-    #rightPanel.open { transform: translateX(0); }
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-    .animate-fade-up { animation: fadeUp 0.3s ease-out forwards; }
-    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
-    .thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: #94a3b8; display: inline-block; animation: bounce 1.2s infinite; }
-    .thinking-dots span:nth-child(2) { animation-delay: .15s; }
-    .thinking-dots span:nth-child(3) { animation-delay: .3s; }
-    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
-    textarea { resize: none; }
-    textarea:focus { outline: none; }
-    .tree-item:hover { background: #f8fafc; }
-    .tree-item.active { background: #eff6ff; color: #1d4ed8; }
-    .detail-tab.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #1d4ed8; }
-    .detail-tab { color: #64748b; }
-    .detail-tab:hover { color: #1d4ed8; }
-    .mode-tab.active { background: white; color: #1d4ed8; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .scenario-btn { transition: all 0.15s; }
-    .scenario-btn:hover { border-color: #1d4ed8; color: #1d4ed8; background: #eff6ff; }
-    #installModal { position: fixed; inset: 0; z-index: 999; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; }
-    #installModal.hidden { display: none; }
-    .modal-card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 420px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
-  </style>
 </head>
-<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+<body>
+  <div class="app-container">
+    <aside id="sidebar" class="sidebar"></aside>
+    <main class="main">
+      <div id="debug-view" class="debug-view hidden"></div>
+      <div id="messages" class="messages"></div>
+      <footer class="input-area">
+        <textarea id="input" placeholder="描述你的需求..." rows="1"></textarea>
+        <button id="send-btn" onclick="app.send()">发送</button>
+      </footer>
+    </main>
+  </div>
 
-<header class="h-14 bg-white border-b border-border flex items-center px-4 gap-3 flex-shrink-0 shadow-sm select-none" data-tauri-drag-region>
-  <div class="flex items-center gap-2.5" data-tauri-drag-region>
-    <div class="w-8 h-8 bg-ink rounded-lg flex items-center justify-center">
-      <span class="text-white text-sm" id="header-logo-icon">📁</span>
-    </div>
-    <span class="font-bold text-[15px] text-ink tracking-tight" data-tauri-drag-region>winwork</span>
-  </div>
-  <div class="flex-1" data-tauri-drag-region></div>
-  <div id="apiStatusBadge" class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium hidden">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
-    <span id="apiStatusText">API 已连接</span>
-  </div>
-  <span id="winworkVersionBadge" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full" title="winwork 版本">winwork: <span id="winworkVersion">-</span></span>
-  <span id="windcliVersionBadge" onclick="handleWindcliVersionClick()" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full cursor-pointer hover:border-brand transition-colors relative" title="wind-cli 版本 (点击更新)">wind-cli: <span id="windcliVersion">-</span><span id="windcliUpdateDot" class="hidden absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span></span>
-  <span id="envStatusBar" class="text-[11px] px-2 py-0.5 rounded-full"></span>
-  <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
-  <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
-  <button onclick="showApiKeyModal()" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
-    <span class="text-sm">⚙️</span>API
-  </button>
-  <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
-    <span class="text-sm">🐛</span>调试
-  </button>
-  <div class="flex items-center gap-1 ml-2 -mr-1">
-    <button onclick="winMinimize()" id="btn-minimize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最小化">
-      <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2"/></svg>
-    </button>
-    <button onclick="winMaximize()" id="btn-maximize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最大化">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10"/></svg>
-    </button>
-    <button onclick="winClose()" id="btn-close" class="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500 hover:text-white text-muted transition-colors" title="关闭">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 1L11 11M11 1L1 11"/></svg>
-    </button>
-  </div>
-</header>
-
-<div id="installModal" class="hidden">
-  <div class="modal-card text-center">
-    <div class="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mx-auto mb-5">
-      <span class="w-8 h-8 text-white">📁</span>
-    </div>
-    <h2 class="text-xl font-bold text-ink mb-1">首次使用，需安装 wind-cli</h2>
-    <p class="text-sm text-muted mb-6">winwork 的核心运行时引擎，安装后即可使用</p>
-    <button onclick="handleModalButton()" id="modal-main-btn" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-      <span id="modal-btn-icon"></span><span id="modal-btn-text">⚡ 一键安装 wind-cli</span>
-    </button>
-    <button onclick="skipAndContinue()" id="skip-btn" class="mt-3 w-full px-4 py-2 text-sm text-muted hover:text-brand border border-border rounded-xl hover:bg-slate-50 transition-colors">
-      跳过 wind-cli，直接进入（部分功能不可用）
-    </button>
-    <p class="text-[11px] text-faint mt-4">安装后若弹出安全警告，点击"仍要运行"即可</p>
-  </div>
-</div>
-
-<div id="apiKeyModal" class="hidden fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
-  <div class="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-bold text-ink">API 配置</h3>
-      <button onclick="hideApiKeyModal()" class="text-slate-400 hover:text-slate-600"><span class="w-5 h-5">✕</span></button>
-    </div>
-    <p class="text-sm text-muted mb-4">配置 AI 模型以启用智能对话功能（支持 OpenAI/MiniMax/兼容 API）</p>
-    <div class="space-y-3">
-      <div>
-        <label class="text-xs text-muted mb-1 block">Base URL</label>
-        <input type="text" id="apiBaseUrlInput" placeholder="https://api.openai.com/v1" class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <h2>设置</h2>
+      <div class="form-group">
+        <label>Base URL</label>
+        <input type="text" id="api-base-url" placeholder="https://...">
       </div>
-      <div>
-        <label class="text-xs text-muted mb-1 block">API Key</label>
-        <input type="password" id="apiKeyInput" placeholder="sk-..." class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="password" id="api-key" placeholder="sk-...">
       </div>
-      <div>
-        <label class="text-xs text-muted mb-1 block">Model</label>
-        <input type="text" id="apiModelInput" placeholder="gpt-4 / MiniMax-M2.7-highspeed" class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
+      <div class="form-group">
+        <label>Model</label>
+        <input type="text" id="api-model" placeholder="MiniMax-M2.7-highspeed">
       </div>
-    </div>
-    <div class="flex gap-2 mt-4">
-      <button onclick="clearApiKey()" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">清除</button>
-      <button onclick="saveApiKey()" class="flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700">保存</button>
+      <div class="modal-actions">
+        <button onclick="app.closeSettings()">取消</button>
+        <button onclick="app.saveSettings()">保存</button>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="flex-1 flex overflow-hidden relative">
-  <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
-    <div class="px-4 py-3 border-b border-border flex items-center justify-between">
-      <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
-      <button onclick="openFolderDialog()" class="text-xs text-brand hover:text-blue-700" title="打开文件夹">📂</button>
-    </div>
-    <div class="flex-1 overflow-y-auto py-2" id="fileTree">
-      <div class="px-3 pb-1">
-        <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span>
-      </div>
-      <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
-    </div>
-  </aside>
-
-  <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
-    <div id="messages" class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
-      <div id="welcomeScreen" class="flex-1 flex flex-col items-center justify-center gap-5 text-center">
-        <div class="w-14 h-14 bg-ink rounded-2xl flex items-center justify-center shadow-md">
-          <span class="w-7 h-7 text-white">📁</span>
-        </div>
-        <div>
-          <h2 class="text-xl font-bold text-ink tracking-tight mb-2">winwork</h2>
-          <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，winwork 将自动调用 wind-cli 完成文件操作</p>
-        </div>
-        <div class="flex flex-wrap gap-2 justify-center mt-1">
-          <button onclick="runScenario('ls')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
-            <span class="w-3.5 h-3.5">📋</span> 列出文件
-          </button>
-          <button onclick="runScenario('mkdir')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
-            <span class="w-3.5 h-3.5">📁</span> 新建目录
-          </button>
-          <button onclick="runScenario('write')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
-            <span class="w-3.5 h-3.5">✏️</span> 写入文件
-          </button>
-          <button onclick="runScenario('wft')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
-            <span class="w-3.5 h-3.5">🔗</span> WFT 打开
-          </button>
-        </div>
-        <div class="flex flex-wrap gap-2 justify-center mt-2">
-          <button onclick="doCheckEnv()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
-            <span>🔍</span> 检查环境
-          </button>
-          <button onclick="doViewLogs()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
-            <span>📜</span> 查看日志
-          </button>
-          <button onclick="doCheckWikiStatus()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
-            <span>📚</span> 知识库状态
-          </button>
-          <button onclick="doReloadWorkspace()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
-            <span>🔄</span> 重载工作区
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="px-8 py-4 bg-white border-t border-border flex-shrink-0">
-      <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
-        <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none max-h-24 flex items-center py-1"></textarea>
-        <div id="sendBtnContainer" class="flex gap-2 flex-shrink-0">
-          <button id="cancelBtn" onclick="cancelSend()" class="hidden px-4 py-2 border border-border text-gray-600 text-sm rounded-lg hover:bg-gray-100 transition-colors">取消</button>
-          <button id="sendBtn" onclick="send()" class="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shadow-sm">发送</button>
-        </div>
-      </div>
-      <p class="text-[11px] text-faint mt-2 pl-1">winwork 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
-    </div>
-  </main>
-
-  <aside id="rightPanel" class="w-[420px] bg-white border-l border-border flex flex-col overflow-hidden">
-    <div class="px-5 py-3.5 border-b border-border flex-shrink-0">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-          <button onclick="switchMode('details', this)" class="mode-tab flex items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-medium transition-all active" id="btn-mode-details">
-            <span>🐛</span> 调试
-          </button>
-        </div>
-        <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors"><span class="w-4 h-4">✕</span></button>
-      </div>
-      <div id="details-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5">
-        <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-file">文件内容</button>
-        <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-trace">执行链路</button>
-        <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-source">数据溯源</button>
-      </div>
-    </div>
-    <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
-      <div id="details-panel">
-        <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
-          <span class="w-8 h-8">ℹ️</span>
-          <p class="text-sm">点击对话中的工具卡片<br>查看调试信息</p>
-        </div>
-        <div id="detail-file" class="hidden"></div>
-        <div id="detail-trace" class="hidden"></div>
-        <div id="detail-source" class="hidden"></div>
-      </div>
-    </div>
-  </aside>
-</div>
-
-<!-- JS Modules -->
-<script src="js/utils.js"></script>
-<script src="js/api.js"></script>
-<script src="js/window.js"></script>
-<script src="js/config.js"></script>
-<script src="js/install.js"></script>
-<script src="js/fileTree.js"></script>
-<script src="js/chat.js"></script>
-<script src="js/display.js"></script>
-<script src="js/detail.js"></script>
-<script src="js/upgrade.js"></script>
-<script src="js/diagnostic.js"></script>
-<script src="js/state.js"></script>
-<script src="js/app.js"></script>
+  <!-- Scripts -->
+  <script src="main.js"></script>
+  <script src="js/utils/sanitize.js"></script>
+  <script src="js/utils/format.js"></script>
+  <script src="js/utils/log.js"></script>
+  <script src="js/core/storage.js"></script>
+  <script src="js/core/command.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/ui/status.js"></script>
+  <script src="js/ui/sidebar.js"></script>
+  <script src="js/ui/chat.js"></script>
+  <script src="js/ui/cards.js"></script>
+  <script src="js/ui/debug.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
