@@ -348,11 +348,12 @@ pub fn check_upgrade() -> HashMap<String, String> {
             let stdout = String::from_utf8_lossy(&o.stdout).to_string();
             let stderr = String::from_utf8_lossy(&o.stderr).to_string();
 
-            // Check for update by looking for keywords in output
-            let has_update = stdout.to_lowercase().contains("update")
-                || stdout.to_lowercase().contains("newer")
-                || stdout.to_lowercase().contains("available")
-                || stdout.to_lowercase().contains("upgrade");
+            // Check for update by looking for specific patterns
+            // Must have "update available" or "new version" or explicit newer version mention
+            let has_update = (stdout.to_lowercase().contains("update") && stdout.to_lowercase().contains("available"))
+                || stdout.to_lowercase().contains("newer version")
+                || stdout.to_lowercase().contains("new version")
+                || (stdout.to_lowercase().contains("latest") && !stdout.to_lowercase().contains("already") && !stdout.to_lowercase().contains("current"));
 
             // Parse version from output (e.g., "v0.1.10" or "current: 0.1.10, latest: 0.1.11")
             let mut current_version = String::new();
@@ -434,5 +435,28 @@ pub fn do_upgrade() -> WindResult {
         .stderr(Stdio::piped())
         .output();
 
-    build_wind_result(output)
+    let result = build_wind_result(output);
+
+    // Verify upgrade was successful by running wind --version
+    if result.ok {
+        let version_output = StdCommand::new(&windcli)
+            .args(["--version"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+
+        if let Ok(v) = version_output {
+            let stdout = String::from_utf8_lossy(&v.stdout).to_string();
+            // Update stdout to include version info
+            return WindResult {
+                ok: true,
+                stdout: format!("{} (当前版本: {})", result.stdout.trim(), stdout.trim()),
+                stderr: result.stderr,
+                exit_code: result.exit_code,
+                data: None,
+            };
+        }
+    }
+
+    result
 }
