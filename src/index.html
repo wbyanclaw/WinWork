@@ -85,15 +85,12 @@
     <span id="apiStatusText">API 已连接</span>
   </div>
   <span id="winworkVersionBadge" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full" title="winwork 版本">winwork: <span id="winworkVersion">-</span></span>
-  <span id="windcliVersionBadge" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full" title="wind-cli 版本">wind-cli: <span id="windcliVersion">-</span></span>
+  <span id="windcliVersionBadge" onclick="handleWindcliVersionClick()" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full cursor-pointer hover:border-brand transition-colors relative" title="wind-cli 版本 (点击更新)">wind-cli: <span id="windcliVersion">-</span><span id="windcliUpdateDot" class="hidden absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span></span>
   <span id="envStatusBar" class="text-[11px] px-2 py-0.5 rounded-full"></span>
   <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
   <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
   <button onclick="showApiKeyModal()" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
     <span class="text-sm">⚙️</span>API
-  </button>
-  <button onclick="showUpgradeModal()" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white relative">
-    <span class="text-sm">🔄</span><span id="upgradeBtnText">更新</span><span id="upgradeBadge" class="hidden absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
   </button>
   <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
     <span class="text-sm">🐛</span>调试
@@ -160,6 +157,7 @@
   <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
     <div class="px-4 py-3 border-b border-border flex items-center justify-between">
       <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
+      <button onclick="openFolderDialog()" class="text-xs text-brand hover:text-blue-700" title="打开文件夹">📂</button>
     </div>
     <div class="flex-1 overflow-y-auto py-2" id="fileTree">
       <div class="px-3 pb-1">

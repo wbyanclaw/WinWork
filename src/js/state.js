@@ -8,7 +8,7 @@ let lastResult = null;
 
 async function loadAppState() {
   try {
-    const state = await invoke('load_state', { relativePath: 'state.json' });
+    const state = await invoke('winwork_load_state', { relativePath: 'state.json' });
     if (state && state !== null && typeof state === 'object') {
       appState.activeWorkspace = state.activeWorkspace || 'default';
       appState.rightPanelTab = state.rightPanelTab || 'trace';
@@ -31,14 +31,14 @@ async function loadAppState() {
 async function loadWorkspaceState() {
   const ws = appState.activeWorkspace;
   try {
-    const chat = await invoke('load_state', { relativePath: `workspaces/${ws}/chat.json` });
+    const chat = await invoke('winwork_load_state', { relativePath: `workspaces/${ws}/chat.json` });
     if (chat && chat !== null && Array.isArray(chat.messages)) {
       restoreChatHistory(chat.messages);
     }
   } catch (e) {}
 
   try {
-    const tree = await invoke('load_state', { relativePath: `workspaces/${ws}/tree_state.json` });
+    const tree = await invoke('winwork_load_state', { relativePath: `workspaces/${ws}/tree_state.json` });
     if (tree && tree !== null) {
       window._treeState = tree.expanded || [];
     }
@@ -74,7 +74,7 @@ async function saveChatHistory() {
     }
   });
   try {
-    await invoke('save_state', {
+    await invoke('winwork_save_state', {
       relativePath: `workspaces/${appState.activeWorkspace}/chat.json`,
       data: { messages }
     });
@@ -83,7 +83,7 @@ async function saveChatHistory() {
 
 async function saveGlobalState() {
   try {
-    await invoke('save_state', {
+    await invoke('winwork_save_state', {
       relativePath: 'state.json',
       data: {
         activeWorkspace: appState.activeWorkspace,
@@ -119,13 +119,9 @@ async function init() {
       const upgradeInfo = await invoke('check_upgrade', {}, 5000);
       window._log && window._log('upgrade check:', JSON.stringify(upgradeInfo));
       if (upgradeInfo && upgradeInfo.found === 'true') {
-        const badge = document.getElementById('upgradeBadge');
-        const btnText = document.getElementById('upgradeBtnText');
-        if (badge && upgradeInfo.has_update === 'true') {
-          badge.classList.remove('hidden');
-          if (btnText) btnText.textContent = '版本更新 ⚠️';
-        } else if (badge) {
-          badge.classList.add('hidden');
+        const dot = document.getElementById('windcliUpdateDot');
+        if (dot && upgradeInfo.has_update === 'true') {
+          dot.classList.remove('hidden');
         }
       }
     } catch (e) {

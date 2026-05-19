@@ -29,8 +29,9 @@ async function loadFileTree() {
     wsSection.innerHTML = '<div class="px-3 pb-1"><span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span></div>';
 
     const wsFolder = document.createElement('div');
-    wsFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+    wsFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium hover:bg-slate-50';
     wsFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📁</span><span>workspace/</span>`;
+    wsFolder.onclick = () => invoke('open_url', { url: 'file://' + envState.workspacePath });
     wsSection.appendChild(wsFolder);
 
     if (wsResult.ok && wsResult.data && wsResult.data.entries && wsResult.data.entries.length > 0) {
@@ -58,16 +59,27 @@ async function loadFileTree() {
 
     container.appendChild(wsSection);
 
+    // Divider
     const divider = document.createElement('div');
     divider.className = 'mx-4 my-2 border-t border-border';
     container.appendChild(divider);
 
+    // Section: 知识库 (wiki)
     const wikiSection = document.createElement('div');
-    wikiSection.innerHTML = '<div class="px-3 pb-1"><span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span></div>';
+    wikiSection.innerHTML = `
+      <div class="px-3 pb-1 flex items-center justify-between">
+        <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span>
+        <button onclick="openWikiDialog()" class="text-xs text-brand hover:text-blue-700" title="添加知识库">📂</button>
+      </div>
+    `;
 
     const wikiFolder = document.createElement('div');
-    wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+    wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium hover:bg-slate-50';
     wikiFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📖</span><span>wiki/</span>`;
+    wikiFolder.onclick = async () => {
+      const wikiPath = await invoke('get_workspace_wiki_path');
+      invoke('open_url', { url: 'file://' + wikiPath });
+    };
     wikiSection.appendChild(wikiFolder);
 
     if (wikiResult.ok && wikiResult.data) {
@@ -98,6 +110,23 @@ async function loadFileTree() {
     errorHtml += `<button onclick="loadFileTree()" class="mx-4 mb-2 px-3 py-1.5 border border-border text-xs rounded-lg hover:bg-slate-50">🔄 重新加载</button><button onclick="doCheckEnv()" class="mx-4 mb-2 px-3 py-1.5 border border-border text-xs rounded-lg hover:bg-slate-50">🔍 检查环境</button>`;
     container.innerHTML = errorHtml;
     window._log && window._log('loadFileTree failed:', e);
+  }
+}
+
+async function openWikiDialog() {
+  try {
+    const result = await invoke('select_folder');
+    if (result.ok && result.data && result.data.path) {
+      const addResult = await invoke('add_wiki', { path: result.data.path });
+      if (addResult.ok) {
+        showToast('已添加到知识库', 'success');
+        await loadFileTree();
+      } else {
+        showToast('添加失败: ' + (addResult.stderr || '未知错误'), 'error');
+      }
+    }
+  } catch (e) {
+    window._log && window._log('add_wiki failed:', e);
   }
 }
 

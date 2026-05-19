@@ -28,7 +28,7 @@ function switchTab(name, btn) {
   // Save tab preference
   appState.rightPanelTab = name;
   try {
-    invoke('save_state', {
+    invoke('winwork_save_state', {
       relativePath: `workspaces/${appState.activeWorkspace}/settings.json`,
       data: { rightPanelTab: name }
     });

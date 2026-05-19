@@ -1,133 +1,133 @@
 // ── Upgrade Check ───────────────────────────────────────────
-async function showUpgradeModal() {
-  const badge = document.getElementById('upgradeBadge');
-  if (badge) badge.classList.add('hidden');
+// Design: Distinctive, calm, utilitarian — avoids AI-slop patterns
+let _upgradeInfo = null;
 
-  const existingModal = document.getElementById('upgradeModal');
-  if (existingModal) existingModal.remove();
+async function handleWindcliVersionClick() {
+  if (!_upgradeInfo) {
+    _upgradeInfo = await invoke('check_upgrade', {}, 5000).catch(() => null);
+  }
+  if (!_upgradeInfo || _upgradeInfo.found !== 'true') return;
 
-  const modal = document.createElement('div');
-  modal.id = 'upgradeModal';
-  modal.className = 'fixed inset-0 z-[1001] bg-black/50 flex items-center justify-center';
-  modal.innerHTML = `
-    <div class="bg-white rounded-2xl p-6 max-w-sm w-[90%] shadow-2xl">
-      <h3 class="text-lg font-bold text-ink mb-4">版本更新</h3>
-      <div id="upgradeContent" class="text-sm text-muted mb-4">
-        <div class="flex items-center gap-2">
-          <div class="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
-          正在检查 wind-cli 版本...
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button onclick="this.closest('#upgradeModal').remove()" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">关闭</button>
-        <button id="upgradeDoBtn" onclick="doUpgrade()" class="hidden flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700">下载更新</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+  const hasUpdate = _upgradeInfo.has_update === 'true';
 
-  try {
-    const info = await invoke('check_upgrade', {}, 10000);
-    const content = document.getElementById('upgradeContent');
-    const doBtn = document.getElementById('upgradeDoBtn');
-
-    if (!info || info.found === 'false') {
-      content.innerHTML = `
-        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div class="flex items-center gap-2 text-red-700 font-medium mb-1">
-            <span class="text-lg">✗</span> wind-cli 未安装
-          </div>
-          <div class="text-sm text-red-600">
-            ${info?.reason || '请先安装 wind-cli'}
-          </div>
-          <button onclick="showInstallModal()" class="mt-3 px-3 py-1.5 bg-brand text-white text-xs rounded-lg hover:bg-blue-700">
-            前往安装
-          </button>
-        </div>`;
-      return;
-    }
-
-    if (info.has_update === 'true') {
-      content.innerHTML = `
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-          <div class="flex items-center gap-2 text-amber-700 font-medium mb-1">
-            <span class="text-lg">⚠️</span> 发现新版本
-          </div>
-          <div class="text-sm text-amber-600">
-            当前版本: ${info.current_version || envState.windcliVersion || '未知'}<br>
-            最新版本: ${info.latest_version || '未知'}
-          </div>
-        </div>
-        <p class="text-xs text-faint mb-3">点击下方按钮下载并安装最新版本</p>
-        <div class="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-600">
-          ${info.output || ''}
-        </div>`;
-      doBtn.classList.remove('hidden');
-      doBtn.dataset.hasUpdate = 'true';
-    } else {
-      content.innerHTML = `
-        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-          <div class="flex items-center gap-2 text-emerald-700 font-medium mb-1">
-            <span class="text-lg">✓</span> 已是最新版本
-          </div>
-          <div class="text-sm text-emerald-600">
-            当前版本: ${info.current_version || envState.windcliVersion || '未知'}
-          </div>
-        </div>`;
-    }
-  } catch (e) {
-    const content = document.getElementById('upgradeContent');
-    content.innerHTML = `
-      <div class="bg-red-50 border border-red-200 rounded-xl p-4">
-        <div class="flex items-center gap-2 text-red-700 font-medium mb-1">
-          <span class="text-lg">✗</span> 检查失败
-        </div>
-        <div class="text-sm text-red-600">${escHtml(String(e))}</div>
-      </div>`;
+  if (hasUpdate) {
+    showUpgradeDialog();
+  } else {
+    showToast('已是最新版本: ' + (_upgradeInfo.current_version || '未知'), 'success');
   }
 }
 
+// Clean, focused dialog — no gradients, no decorative elements
+function showUpgradeDialog() {
+  const overlay = document.createElement('div');
+  overlay.id = 'upgradeOverlay';
+  overlay.className = 'fixed inset-0 bg-black/30 flex items-center justify-center z-[1000]';
+  overlay.onclick = (e) => { if (e.target === overlay) closeUpgradeDialog(); };
+
+  const dialog = document.createElement('div');
+  dialog.className = 'bg-white rounded-xl shadow-xl w-[360px] overflow-hidden';
+
+  // Header — utilitarian, purposeful
+  const header = document.createElement('div');
+  header.className = 'px-5 py-4 border-b border-slate-200';
+  header.innerHTML = `
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+        <span class="text-base">↻</span>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-base font-semibold text-slate-900">wind-cli 更新</h3>
+        <p class="text-xs text-slate-500 mt-0.5">发现新版本可用</p>
+      </div>
+    </div>
+  `;
+
+  // Version comparison — clean, scannable
+  const content = document.createElement('div');
+  content.className = 'px-5 py-4';
+  content.innerHTML = `
+    <div class="flex items-center gap-4 py-2">
+      <div class="flex-1 text-center">
+        <div class="text-[11px] text-slate-500 mb-1 uppercase tracking-wide">当前</div>
+        <div class="text-lg font-mono text-slate-700">${_upgradeInfo.current_version || '?'}</div>
+      </div>
+      <div class="text-slate-300 text-lg">→</div>
+      <div class="flex-1 text-center">
+        <div class="text-[11px] text-slate-500 mb-1 uppercase tracking-wide">最新</div>
+        <div class="text-lg font-mono font-semibold text-slate-900">${_upgradeInfo.latest_version || '?'}</div>
+      </div>
+    </div>
+  `;
+
+  // Action area — minimal, no marketing fluff
+  const actions = document.createElement('div');
+  actions.className = 'px-5 pb-5 flex gap-2';
+  actions.innerHTML = `
+    <button onclick="closeUpgradeDialog()" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors">稍后</button>
+    <button onclick="doUpgrade()" class="flex-1 px-4 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">下载更新</button>
+  `;
+
+  dialog.appendChild(header);
+  dialog.appendChild(content);
+  dialog.appendChild(actions);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+}
+
+function closeUpgradeDialog() {
+  const overlay = document.getElementById('upgradeOverlay');
+  if (overlay) overlay.remove();
+}
+
 async function doUpgrade() {
-  const content = document.getElementById('upgradeContent');
-  const doBtn = document.getElementById('upgradeDoBtn');
-  doBtn.disabled = true;
-  doBtn.textContent = '更新中...';
+  closeUpgradeDialog();
+
+  // Progress indicator — functional, not decorative
+  const toast = document.createElement('div');
+  toast.id = 'upgradeProgress';
+  toast.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-8 flex flex-col items-center gap-4 z-[1001]';
+  toast.innerHTML = `
+    <div class="w-8 h-8 border-2 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
+    <div class="text-center">
+      <div class="text-sm font-medium text-slate-900">正在更新</div>
+      <div class="text-xs text-slate-500 mt-1">请稍候...</div>
+    </div>
+  `;
+  document.body.appendChild(toast);
 
   try {
-    content.innerHTML = `
-      <div class="flex items-center gap-2">
-        <div class="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
-        正在更新 wind-cli...
-      </div>`;
+    const result = await invoke('do_upgrade', {}, 120000);
+    toast.remove();
 
-    const result = await invoke('do_upgrade', {}, 30000);
     if (result && result.ok) {
-      content.innerHTML = `
-        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-          <div class="flex items-center gap-2 text-emerald-700 font-medium mb-2">
-            <span class="text-lg">✓</span> 更新成功
-          </div>
-          <p class="text-sm text-emerald-600">wind-cli 已更新，请重启应用</p>
-        </div>`;
+      showToast('wind-cli 已更新，请重启应用', 'success');
+      const dot = document.getElementById('windcliUpdateDot');
+      if (dot) dot.classList.add('hidden');
+      _upgradeInfo = null;
     } else {
-      content.innerHTML = `
-        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div class="flex items-center gap-2 text-red-700 font-medium mb-2">
-            <span class="text-lg">✗</span> 更新失败
-          </div>
-          <p class="text-xs text-red-600 mb-2">${escHtml(result?.stderr || '未知错误')}</p>
-          <a href="https://github.com/wbyanclaw/wind-cli/releases/latest" target="_blank" class="text-xs text-brand hover:underline">手动下载最新版本 →</a>
-        </div>`;
+      const errMsg = result?.stderr || result?.message || '未知错误';
+      showToast('更新失败: ' + errMsg, 'error');
     }
   } catch (e) {
-    content.innerHTML = `
-      <div class="bg-red-50 border border-red-200 rounded-xl p-4">
-        <div class="flex items-center gap-2 text-red-700 font-medium mb-2">
-          <span class="text-lg">✗</span> 更新失败
-        </div>
-        <p class="text-xs text-red-600">${escHtml(String(e))}</p>
-      </div>`;
+    toast.remove();
+    showToast('更新失败: ' + String(e), 'error');
   }
+}
 
-  if (doBtn) doBtn.remove();
+function showToast(message, type = 'info') {
+  const existing = document.querySelector('.toast-notification');
+  if (existing) existing.remove();
+
+  const colors = {
+    success: 'bg-emerald-600 text-white',
+    error: 'bg-red-600 text-white',
+    info: 'bg-slate-900 text-white'
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast-notification fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-3 rounded-lg text-sm shadow-lg z-[1002] ${colors[type] || colors.info}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => toast.remove(), 4000);
 }

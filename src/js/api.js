@@ -44,10 +44,12 @@ async function checkAllEnv() {
     const info = await invoke('check_windcli');
     envState.windcli = info.found === 'true';
     envState.windcliPath = info.path || '';
-    envState.windcliVersion = info.version || '';
+    // Strip "wind " prefix from version
+    envState.windcliVersion = (info.version || '').replace(/^wind\s*/i, '');
+    envState.workspacePath = info.workspace_path || await invoke('get_workspace_path');
     window._log && window._log('windcli info:', JSON.stringify(info));
     const wcVerEl = document.getElementById('windcliVersion');
-    if (wcVerEl) wcVerEl.textContent = info.version || '?';
+    if (wcVerEl) wcVerEl.textContent = envState.windcliVersion || '?';
   } catch (e) { envState.windcli = false; }
 
   const allReady = envState.windcli;

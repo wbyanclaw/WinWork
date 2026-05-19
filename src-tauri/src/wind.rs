@@ -3,6 +3,19 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Command as StdCommand, Stdio};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+fn add_no_window(cmd: &mut StdCommand) -> &mut StdCommand {
+    cmd.creation_flags(0x08000000) // CREATE_NO_WINDOW
+}
+
+#[cfg(not(target_os = "windows"))]
+fn add_no_window(cmd: &mut StdCommand) -> &mut StdCommand {
+    cmd
+}
+
 use which::which;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -103,7 +116,7 @@ pub fn run_wind(args: &[&str]) -> WindResult {
 
     if which(&wind_path).is_err() {
         if which("windcli").is_ok() {
-            let output = StdCommand::new("windcli")
+            let output = add_no_window(&mut StdCommand::new("windcli"))
                 .args(args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -119,7 +132,7 @@ pub fn run_wind(args: &[&str]) -> WindResult {
         };
     }
 
-    let output = StdCommand::new(&wind_path)
+    let output = add_no_window(&mut StdCommand::new(&wind_path))
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -158,6 +171,7 @@ pub fn check_windcli() -> HashMap<String, String> {
     if let Some(path) = find_windcli() {
         result.insert("found".to_string(), "true".to_string());
         result.insert("path".to_string(), path.clone());
+        result.insert("workspace_path".to_string(), get_workspace_path());
         let version_out = run_wind(&["--version"]);
         result.insert(
             "version".to_string(),
@@ -267,6 +281,29 @@ pub fn get_wiki_dir() -> String {
     }
 }
 
+/// Get wiki path: ~/.local/share/wind/wiki/
+pub fn get_wiki_path() -> String {
+    get_wind_root().join("wiki").to_string_lossy().into_owned()
+}
+
+/// Read file content from the workspace.
+pub fn read_file(path: &str) -> WindResult {
+    let full_path = if std::path::Path::new(path).is_absolute() {
+        path.to_string()
+    } else {
+        let workspace = get_workspace_path();
+        let ws = workspace.trim_end_matches('/');
+        format!("{}/{}", ws, path)
+    };
+    run_wind(&["--json", "read", &full_path])
+}
+
+/// List files in a directory (or workspace root if no path provided).
+pub fn list_files(path: Option<String>) -> WindResult {
+    let target_path = path.unwrap_or_else(|| get_workspace_path());
+    run_wind(&["--json", "ls", &target_path])
+}
+
 /// Check if llm-wiki is available.
 pub fn check_llm_wiki() -> HashMap<String, String> {
     let mut result = HashMap::new();
@@ -292,7 +329,7 @@ pub fn check_llm_wiki() -> HashMap<String, String> {
         return result;
     };
 
-    let out = StdCommand::new(&windcli)
+    let out = add_no_window(&mut StdCommand::new(&windcli))
         .args(["wiki", "status"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -337,7 +374,7 @@ pub fn check_upgrade() -> HashMap<String, String> {
         }
     };
 
-    let output = StdCommand::new(&windcli)
+    let output = add_no_window(&mut StdCommand::new(&windcli))
         .args(["upgrade", "--check"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -348,48 +385,51 @@ pub fn check_upgrade() -> HashMap<String, String> {
             let stdout = String::from_utf8_lossy(&o.stdout).to_string();
             let stderr = String::from_utf8_lossy(&o.stderr).to_string();
 
-            // Check for update by looking for specific patterns
-            // Must have "update available" or "new version" or explicit newer version mention
-            let has_update = (stdout.to_lowercase().contains("update") && stdout.to_lowercase().contains("available"))
-                || stdout.to_lowercase().contains("newer version")
-                || stdout.to_lowercase().contains("new version")
-                || (stdout.to_lowercase().contains("latest") && !stdout.to_lowercase().contains("already") && !stdout.to_lowercase().contains("current"));
-
-            // Parse version from output (e.g., "v0.1.10" or "current: 0.1.10, latest: 0.1.11")
+            // Parse JSON response for structured data
             let mut current_version = String::new();
             let mut latest_version = String::new();
+            let mut update_available = false;
 
-            // Try to extract versions from output
-            // Pattern: looking for version numbers like 0.1.x or v0.x.x
-            for line in stdout.lines() {
-                let line_lower = line.to_lowercase();
-                if line_lower.contains("current") || line_lower.contains("your") {
-                    // Try to extract version number
-                    if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
-                        if current_version.is_empty() {
-                            current_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(current) = json.get("current_version").and_then(|v| v.as_str()) {
+                    current_version = current.to_string();
+                }
+                if let Some(latest) = json.get("latest_version").and_then(|v| v.as_str()) {
+                    latest_version = latest.to_string();
+                }
+                if let Some(available) = json.get("update_available").and_then(|v| v.as_bool()) {
+                    update_available = available;
+                }
+            }
+
+            // Fallback: try to parse version numbers from text output
+            if current_version.is_empty() || latest_version.is_empty() {
+                for line in stdout.lines() {
+                    let line_lower = line.to_lowercase();
+                    if line_lower.contains("current") || line_lower.contains("your") {
+                        if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
+                            if current_version.is_empty() {
+                                current_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+                            }
                         }
                     }
-                }
-                if line_lower.contains("latest") || line_lower.contains("new") {
-                    if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
-                        if latest_version.is_empty() {
-                            latest_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+                    if line_lower.contains("latest") || line_lower.contains("new") {
+                        if let Some(caps) = regex::Regex::new(r"v?(\d+\.\d+\.\d+)").ok().and_then(|r| r.captures(line)) {
+                            if latest_version.is_empty() {
+                                latest_version = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+                            }
                         }
                     }
                 }
             }
 
-            // If versions still empty, try single version pattern
-            if current_version.is_empty() && latest_version.is_empty() {
-                if let Some(caps) = regex::Regex::new(r"(\d+\.\d+\.\d+)").ok().and_then(|r| r.find(&stdout)) {
-                    if has_update {
-                        latest_version = caps.as_str().to_string();
-                    } else {
-                        current_version = caps.as_str().to_string();
-                    }
-                }
+            // Fallback: text pattern check only if JSON parsing didn't confirm update status
+            if !update_available && !current_version.is_empty() && !latest_version.is_empty() {
+                update_available = current_version != latest_version;
             }
+
+            // Only consider update available if versions are different
+            let has_update = update_available && current_version != latest_version && !current_version.is_empty() && !latest_version.is_empty();
 
             result.insert("found".to_string(), "true".to_string());
             result.insert("has_update".to_string(), if has_update { "true" } else { "false" }.to_string());
@@ -429,7 +469,7 @@ pub fn do_upgrade() -> WindResult {
         }
     };
 
-    let output = StdCommand::new(&windcli)
+    let output = add_no_window(&mut StdCommand::new(&windcli))
         .args(["upgrade"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -439,7 +479,7 @@ pub fn do_upgrade() -> WindResult {
 
     // Verify upgrade was successful by running wind --version
     if result.ok {
-        let version_output = StdCommand::new(&windcli)
+        let version_output = add_no_window(&mut StdCommand::new(&windcli))
             .args(["--version"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
