@@ -119,11 +119,22 @@ async function loadFileTree() {
             ...wsEntries,
             { name: 'wiki', type: 'dir', path: 'workspace/wiki' }
           ];
-          renderFileTree(entries, 'file-tree-root', 0, true);
-          // 预加载 workspace 的内容
-          treeState.set('tree-workspace', wsEntries);
-          // 预加载 wiki 的内容
+
+          // 预加载 workspace 子目录内容（只加载第一层）
+          for (const entry of wsEntries) {
+            if (entry.type === 'dir') {
+              const subResult = await invoke('run_command', { args: ['--json', 'ls', `workspace/${entry.name}`] });
+              if (subResult.ok && subResult.data?.entries) {
+                const nodeId = `tree-${btoa(entry.name).replace(/[/+=]/g, '_')}`;
+                treeState.set(nodeId, subResult.data.entries);
+              }
+            }
+          }
+
+          // 预加载 wiki 内容
           loadWikiContent();
+
+          renderFileTree(entries, 'file-tree-root', 0, true);
           return;
         }
       }
