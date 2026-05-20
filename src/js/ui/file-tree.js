@@ -107,14 +107,46 @@ async function loadFileTree() {
   try {
     const result = await invoke('run_command', { args: ['--json', 'ls'] });
     if (result.ok && result.data?.entries) {
-      renderFileTree(result.data.entries, 'file-tree-root');
+      const entries = result.data.entries;
+
+      // 如果只有 workspace 一个目录，默认展开它
+      if (entries.length === 1 && entries[0].name === 'workspace' && entries[0].type === 'dir') {
+        const wsResult = await invoke('run_command', { args: ['--json', 'ls', 'workspace'] });
+        if (wsResult.ok && wsResult.data?.entries) {
+          const wsEntries = wsResult.data.entries;
+          // 在 workspace 后面添加一个 wiki 条目（显示为根级）
+          entries = [
+            ...wsEntries,
+            { name: 'wiki', type: 'dir', path: 'workspace/wiki' }
+          ];
+          renderFileTree(entries, 'file-tree-root', 0, true);
+          // 预加载 workspace 的内容
+          treeState.set('tree-workspace', wsEntries);
+          // 预加载 wiki 的内容
+          loadWikiContent();
+          return;
+        }
+      }
+
+      renderFileTree(entries, 'file-tree-root', 0, true);
     }
   } catch (e) {
     console.error('Failed to load file tree:', e);
   }
 }
 
-function renderFileTree(entries, containerId, depth = 0) {
+async function loadWikiContent() {
+  try {
+    const result = await invoke('run_command', { args: ['--json', 'ls', 'workspace/wiki'] });
+    if (result.ok && result.data?.entries) {
+      treeState.set('tree-wiki', result.data.entries);
+    }
+  } catch (e) {
+    console.error('Failed to load wiki:', e);
+  }
+}
+
+function renderFileTree(entries, containerId, depth = 0, autoExpand = false) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -124,20 +156,21 @@ function renderFileTree(entries, containerId, depth = 0) {
     const paddingLeft = 12 + depth * 16;
 
     if (isDir) {
+      const shouldAutoExpand = autoExpand && depth === 0;
       return `
         <div class="tree-node" data-name="${entry.name}" data-type="dir" data-id="${id}">
-          <div class="tree-item" style="padding-left:${paddingLeft}px" onclick="toggleTreeNode('${id}', '${entry.name}')">
-            <span class="tree-chevron collapsed" id="${id}-chevron">${icons.chevronRight}</span>
-            <span class="tree-icon">${icons.folder}</span>
+          <div class="tree-item ${shouldAutoExpand ? 'expanded' : ''}" style="padding-left:${paddingLeft}px" onclick="toggleTreeNode('${id}', '${entry.name}', '${entry.path || entry.name}')">
+            <span class="tree-chevron ${shouldAutoExpand ? 'expanded' : 'collapsed'}" id="${id}-chevron">${shouldAutoExpand ? icons.chevronDown : icons.chevronRight}</span>
+            <span class="tree-icon">${shouldAutoExpand ? icons.folderOpen : icons.folder}</span>
             <span class="tree-name">${entry.name}</span>
           </div>
-          <div class="tree-children hidden" id="${id}-children"></div>
+          <div class="tree-children ${shouldAutoExpand ? '' : 'hidden'}" id="${id}-children"></div>
         </div>
       `;
     } else {
       return `
         <div class="tree-node" data-name="${entry.name}" data-type="file">
-          <div class="tree-item" style="padding-left:${paddingLeft}px" onclick="openFilePreview('${entry.name}')">
+          <div class="tree-item" style="padding-left:${paddingLeft}px" onclick="openFilePreview('${entry.name}', '${entry.path || ''}')">
             <span class="tree-chevron"></span>
             <span class="tree-icon">${icons.fileText}</span>
             <span class="tree-name">${entry.name}</span>
@@ -146,35 +179,57 @@ function renderFileTree(entries, containerId, depth = 0) {
       `;
     }
   }).join('');
+
+  // 如果自动展开，加载子目录内容
+  if (autoExpand && depth === 0) {
+    for (const entry of entries) {
+      if (entry.type === 'dir') {
+        const id = `tree-${btoa(entry.name).replace(/[/+=]/g, '_')}`;
+        loadChildren(id, entry.path || entry.name);
+      }
+    }
+  }
 }
 
-async function toggleTreeNode(nodeId, dirName) {
+async function loadChildren(nodeId, dirPath) {
+  try {
+    const result = await invoke('run_command', { args: ['--json', 'ls', dirPath] });
+    if (result.ok && result.data?.entries) {
+      treeState.set(nodeId, result.data.entries);
+      // 如果目录是展开的，渲染子内容
+      const childrenEl = document.getElementById(`${nodeId}-children`);
+      if (childrenEl && !childrenEl.classList.contains('hidden')) {
+        renderFileTree(result.data.entries, `${nodeId}-children`, getTreeDepth(nodeId) + 1);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load directory:', e);
+  }
+}
+
+async function toggleTreeNode(nodeId, dirName, dirPath) {
   const childrenEl = document.getElementById(`${nodeId}-children`);
   const chevronEl = document.getElementById(`${nodeId}-chevron`);
   const nodeEl = document.querySelector(`[data-id="${nodeId}"]`);
   const iconEl = nodeEl?.querySelector('.tree-icon');
+  const itemEl = nodeEl?.querySelector('.tree-item');
+
+  const path = dirPath || dirName;
 
   if (childrenEl.classList.contains('hidden')) {
     // Expand
     if (!treeState.has(nodeId)) {
-      // Load children from server
-      try {
-        const result = await invoke('run_command', { args: ['--json', 'ls', dirName] });
-        if (result.ok && result.data?.entries) {
-          treeState.set(nodeId, result.data.entries);
-        }
-      } catch (e) {
-        console.error('Failed to load directory:', e);
-      }
+      await loadChildren(nodeId, path);
     }
 
     const children = treeState.get(nodeId) || [];
-    renderFileTree(children, `${nodeId}-children`, getTreeDepth(nodeId));
+    renderFileTree(children, `${nodeId}-children`, getTreeDepth(nodeId) + 1);
     childrenEl.classList.remove('hidden');
     chevronEl.classList.remove('collapsed');
     chevronEl.classList.add('expanded');
     chevronEl.innerHTML = icons.chevronDown;
     if (iconEl) iconEl.innerHTML = icons.folderOpen;
+    if (itemEl) itemEl.classList.add('expanded');
   } else {
     // Collapse
     childrenEl.classList.add('hidden');
@@ -182,6 +237,7 @@ async function toggleTreeNode(nodeId, dirName) {
     chevronEl.classList.add('collapsed');
     chevronEl.innerHTML = icons.chevronRight;
     if (iconEl) iconEl.innerHTML = icons.folder;
+    if (itemEl) itemEl.classList.remove('expanded');
   }
 }
 
@@ -195,9 +251,11 @@ function getTreeDepth(nodeId) {
   return Math.floor((padding - 12) / 16) + 1;
 }
 
-async function openFilePreview(filename) {
+async function openFilePreview(filename, filePath) {
   try {
-    const result = await invoke('run_command', { args: ['--json', 'read', filename] });
+    // 如果有路径，使用完整路径；否则只用文件名
+    const readPath = filePath ? `${filePath}/${filename}` : filename;
+    const result = await invoke('run_command', { args: ['--json', 'read', readPath] });
     if (result.ok) {
       filePanel.open({
         name: filename,
