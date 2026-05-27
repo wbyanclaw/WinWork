@@ -1,6 +1,6 @@
 [package]
 name = "winwork"
-version = "0.2.23"
+version = "0.2.24"
 description = "AI Agent file management demo powered by wind-cli"
 authors = ["wind-cli team"]
 edition = "2021"
