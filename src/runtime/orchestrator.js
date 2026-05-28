@@ -1,7 +1,7 @@
 // src/runtime/orchestrator.js
 // Main product loop orchestrator - saves AI-generated artifacts to workspace
 
-import { decideArtifactPlan } from './artifact-policy.js';
+import { decideArtifactPlan, shouldAutoIngest } from './artifact-policy.js';
 
 /**
  * Create an orchestrator that manages the artifact save flow.
@@ -40,11 +40,33 @@ export function createOrchestrator(runtime) {
         console.error(`[orchestrator] Failed to write artifact: ${artifactPlan.relativePath}`);
       }
 
+      // After successful write, check if should auto-ingest
+      const canIngest = shouldAutoIngest({
+        relativePath: artifactPlan.relativePath,
+        autoIngest: true
+      });
+
+      let wiki = { ingested: false, skipped: !canIngest };
+      if (writeResult.ok && canIngest) {
+        const ingestResult = await runtime.ingestWiki({ path: artifactPlan.relativePath });
+        wiki = {
+          ingested: ingestResult.ok,
+          skipped: false,
+          error: ingestResult.ok ? null : ingestResult.stderr
+        };
+      }
+
+      const trace = [{ kind: 'artifact.write', path: artifactPlan.relativePath, ok: writeResult.ok }];
+      if (wiki.ingested) {
+        trace.push({ kind: 'wiki.ingest', path: artifactPlan.relativePath, ok: wiki.ingested });
+      }
+
       return {
         ok: writeResult.ok,
         response: aiResponse,
         artifact: { saved: writeResult.ok, path: artifactPlan.relativePath },
-        trace: [{ kind: 'artifact.write', path: artifactPlan.relativePath, ok: writeResult.ok }],
+        wiki,
+        trace
       };
     }
   };

@@ -34,3 +34,17 @@ export function decideArtifactPlan({ taskText, suggestedTitle }) {
     conflict: 'suffix'
   };
 }
+
+/**
+ * Decide whether an artifact should be auto-ingested into the wiki.
+ * Text files (.md, .txt, .json) are eligible for auto-ingest by default.
+ *
+ * @param {Object} params - Decision parameters
+ * @param {string} params.relativePath - The artifact file path
+ * @param {boolean} [params.autoIngest=true] - Whether auto-ingest is enabled
+ * @returns {boolean} Whether the artifact should be auto-ingested
+ */
+export function shouldAutoIngest({ relativePath, autoIngest = true }) {
+  if (!autoIngest) return false;
+  return /\.(md|txt|json)$/i.test(relativePath);
+}

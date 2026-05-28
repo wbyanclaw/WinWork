@@ -23,3 +23,24 @@ test('orchestrator persists report artifact before returning success', async () 
   assert.match(writes[0].path, /^deliverables\//);
   assert.equal(result.artifact.saved, true);
 });
+
+test('orchestrator auto-ingests markdown artifact after save', async () => {
+  let ingested = false;
+  const runtime = {
+    runTool: async () => ({ ok: true }),
+    writeArtifact: async ({ path }) => ({ ok: true, path }),
+    ingestWiki: async ({ path }) => {
+      ingested = path.endsWith('.md');
+      return { ok: true };
+    }
+  };
+
+  const orchestrator = createOrchestrator(runtime);
+  const result = await orchestrator.execute({
+    taskText: '写一份复盘报告',
+    aiResponse: '# 复盘报告\n'
+  });
+
+  assert.equal(ingested, true);
+  assert.equal(result.wiki.ingested, true);
+});
