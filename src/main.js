@@ -1,18 +1,42 @@
+// src/main.js
+// Runtime initialization for winwork
+
+// Import environment service for structured status handling
+import { normalizeEnvironmentStatus, isEnvironmentReady } from './runtime/environment-service.js';
+
 const { invoke } = window.__TAURI__.core;
 
-let greetInputEl;
-let greetMsgEl;
+// Application state
+let appReady = false;
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsgEl.textContent = await invoke("greet", { name: greetInputEl.value });
+/**
+ * Initialize the runtime environment.
+ * Performs environment check and updates UI accordingly.
+ */
+async function initRuntime() {
+  window._log && window._log('RUNTIME: initializing');
+
+  let envStatus = null;
+
+  try {
+    // Get combined environment status using single backend call
+    const raw = await invoke('get_environment_status');
+    envStatus = normalizeEnvironmentStatus(raw);
+    window._log && window._log('RUNTIME: env status received', JSON.stringify(envStatus));
+  } catch(e) {
+    window._log && window._log('RUNTIME: get_environment_status failed, using fallback', e);
+    // Fallback handled in index.html checkAllEnv()
+  }
+
+  return envStatus;
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});
+/**
+ * Check if the runtime is ready for full operation.
+ * @returns {boolean} True if windcli is installed and ready
+ */
+function isReady() {
+  return appReady;
+}
+
+export { initRuntime, normalizeEnvironmentStatus, isEnvironmentReady, isReady };

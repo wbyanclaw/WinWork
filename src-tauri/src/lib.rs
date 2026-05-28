@@ -231,6 +231,28 @@ fn get_winwork_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Unified environment status payload for structured frontend rendering.
+#[derive(Debug, Serialize)]
+struct EnvironmentStatusPayload {
+    winwork_version: String,
+    windcli: HashMap<String, String>,
+    wiki: HashMap<String, String>,
+}
+
+/// Get combined environment status (winwork + windcli + wiki).
+/// Returns a single structured payload instead of multiple individual calls.
+#[tauri::command]
+fn get_environment_status() -> EnvironmentStatusPayload {
+    let winwork_version = env!("CARGO_PKG_VERSION").to_string();
+    let windcli = check_windcli();
+    let wiki = check_llm_wiki();
+    EnvironmentStatusPayload {
+        winwork_version,
+        windcli,
+        wiki,
+    }
+}
+
 /// Get workspace path using proper directory structure:
 /// ~/.local/share/wind/workspace/
 /// ~/.local/share/wind/wiki/
@@ -887,6 +909,7 @@ pub fn run() {
             list_workspaces,
             delete_workspace,
             get_winwork_root,
+            get_environment_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

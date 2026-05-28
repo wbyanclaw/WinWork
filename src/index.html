@@ -428,6 +428,31 @@
   <script>
     try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
 
+    // ── Runtime Services ────────────────────────────────────────
+    // Import environment service functions from runtime module
+    const parseWindVersion = window.parseWindVersion || ((raw = '') => {
+      const match = raw.match(/(?:wind|windcli)\s+v?(\d+\.\d+\.\d+)/i);
+      return match ? match[1] : null;
+    });
+    const normalizeEnvironmentStatus = window.normalizeEnvironmentStatus || ((input) => {
+      const current = parseWindVersion(input?.windcli?.version ?? '');
+      return {
+        winwork: { version: input?.winworkVersion ?? 'unknown' },
+        windcli: {
+          installed: input?.windcli?.found === 'true',
+          current,
+          latest: current,
+          up_to_date: Boolean(current),
+          path: input?.windcli?.path ?? '',
+          display: current ? `wind-cli ${current}` : 'wind-cli 未安装'
+        },
+        wiki: {
+          available: input?.wiki?.found === 'true',
+          reason: input?.wiki?.reason ?? null
+        }
+      };
+    });
+
     // ── API Key Storage (obfuscated, not plaintext) ─────────────
     // Simple XOR obfuscation to prevent casual localStorage reading.
     // Not real encryption — adequate for demo app; swap for tauri-plugin-store for production.
@@ -665,31 +690,52 @@
       const statusBar = document.getElementById('envStatusBar');
       const modal = document.getElementById('installModal');
 
+      let envStatus = null;
       try {
-        // Get winwork version
-        const wwVer = await invoke('get_winwork_version');
-        envState.winworkVersion = wwVer;
+        // Get combined environment status using single backend call
+        const raw = await invoke('get_environment_status');
+        envStatus = normalizeEnvironmentStatus(raw);
+        window._log && window._log('environment status:', JSON.stringify(envStatus));
+
+        // Update envState with structured data
+        envState.winworkVersion = envStatus.winwork.version;
+        envState.windcli = envStatus.windcli.installed;
+        envState.windcliPath = envStatus.windcli.path;
+        envState.windcliVersion = envStatus.windcli.current || 'unknown';
+        envState.llmwiki = envStatus.wiki.available;
+
+        // Update version badge in header
         const verEl = document.getElementById('winworkVersion');
-        if (verEl) verEl.textContent = 'v' + wwVer;
-      } catch(e) { window._log && window._log('get_winwork_version failed:', e); }
+        if (verEl) verEl.textContent = 'v' + envStatus.winwork.version;
+      } catch(e) {
+        window._log && window._log('get_environment_status failed:', e);
+        // Fallback to individual calls for backward compatibility
+        try {
+          const wwVer = await invoke('get_winwork_version');
+          envState.winworkVersion = wwVer;
+          const verEl = document.getElementById('winworkVersion');
+          if (verEl) verEl.textContent = 'v' + wwVer;
+        } catch(e2) {}
 
-      try {
-        const info = await invoke('check_windcli');
-        envState.windcli = info.found === 'true';
-        envState.windcliPath = info.path || '';
-        envState.windcliVersion = info.version || '';
-        window._log && window._log('windcli info:', JSON.stringify(info));
-      } catch(e) { envState.windcli = false; }
+        try {
+          const info = await invoke('check_windcli');
+          envState.windcli = info.found === 'true';
+          envState.windcliPath = info.path || '';
+          const parsed = parseWindVersion(info.version || '');
+          envState.windcliVersion = parsed || 'unknown';
+        } catch(e2) { envState.windcli = false; }
 
-      try {
-        const info = await invoke('check_llm_wiki');
-        envState.llmwiki = info.found === 'true';
-      } catch(e) { envState.llmwiki = false; }
+        try {
+          const info = await invoke('check_llm_wiki');
+          envState.llmwiki = info.found === 'true';
+        } catch(e2) { envState.llmwiki = false; }
+      }
 
       const allReady = envState.windcli && envState.llmwiki;
 
-      // Show diagnostic info in status bar
-      const diagInfo = `winwork ${envState.winworkVersion} | windcli ${envState.windcliVersion} @ ${envState.windcliPath}`;
+      // Show diagnostic info in status bar using structured display
+      const windcliDisplay = envStatus?.windcli?.display || `wind-cli ${envState.windcliVersion}`;
+      const diagInfo = `winwork ${envState.winworkVersion} | ${windcliDisplay}`;
 
       if (allReady) {
         statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪 <span class="text-faint ml-1">${diagInfo}</span></span>`;
@@ -1089,14 +1135,21 @@
     // ── Diagnostic helpers ───────────────────────────────────
     async function doCheckEnv() {
       appendCallLog('执行环境检查...');
-      const info = await invoke('check_windcli');
-      const wiki = await invoke('check_llm_wiki');
-      const ww = await invoke('get_winwork_version');
-      let msg = `winwork: ${ww}\nwind-cli: ${info.found === 'true' ? '已安装 (' + (info.path || 'unknown') + ') v' + (info.version || '?') : '未安装'}\n知识库: ${wiki.found === 'true' ? '可用' : '不可用 (' + (wiki.reason || 'unknown') + ')'}`;
-      appendCallLog(msg);
-      autoSwitchToDiagnostics('call');
-      // Show result in messages
-      appendMessage('agent', msg, document.getElementById('messages'));
+      try {
+        // Use single get_environment_status call with normalizeEnvironmentStatus
+        const raw = await invoke('get_environment_status');
+        const status = normalizeEnvironmentStatus(raw);
+        const msg = `winwork: ${status.winwork.version}\nwind-cli: ${status.windcli.installed ? '已安装 (' + status.windcli.path + ') v' + status.windcli.current : '未安装'}\n知识库: ${status.wiki.available ? '可用' : '不可用' + (status.wiki.reason ? ' (' + status.wiki.reason + ')' : '')}`;
+        appendCallLog(msg);
+        autoSwitchToDiagnostics('call');
+        // Show result in messages
+        appendMessage('agent', msg, document.getElementById('messages'));
+      } catch(e) {
+        const errMsg = '检查失败: ' + String(e);
+        appendCallLog(errMsg);
+        appendMessage('agent', errMsg, document.getElementById('messages'));
+        autoSwitchToDiagnostics('call');
+      }
     }
 
     function doViewLogs() {
