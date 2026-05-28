@@ -2,6 +2,8 @@
  * Debug log module with stable buffer and auto-scroll behavior
  */
 
+const MAX_LINES = 500;
+
 const listeners = new Set();
 const lines = [];
 
@@ -12,6 +14,9 @@ const lines = [];
 export function appendDebug(entry) {
   const line = typeof entry === 'string' ? entry : JSON.stringify(entry);
   lines.push(line);
+  if (lines.length >= MAX_LINES) {
+    lines.shift();
+  }
   for (const listener of listeners) {
     listener([...lines]);
   }

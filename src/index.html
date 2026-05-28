@@ -111,11 +111,13 @@
     window._orchestrator = orchestrator;
 
     // Wire debug-log to the debug panel
-    const debugContent = document.getElementById('debugLogContent');
-    if (debugContent) {
+    if (document.getElementById('debugLogContent')) {
       subscribeDebug((lines) => {
-        debugContent.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
-        debugContent.scrollTop = debugContent.scrollHeight;
+        const el = document.getElementById('debugLogContent');
+        if (el) {
+          el.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+          el.scrollTop = el.scrollHeight;
+        }
       });
     }
   </script>
