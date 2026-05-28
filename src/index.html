@@ -81,6 +81,35 @@
       document.head.appendChild(script);
     })();
   </script>
+  <!-- Runtime adapter and orchestrator initialization -->
+  <script type="module">
+    import { createOrchestrator } from './runtime/orchestrator.js';
+
+    // Create runtime for Tauri mode
+    const runtime = {
+      runTool: async (cmd) => {
+        // Dynamically get invoke from Tauri global
+        const { invoke } = window.__TAURI__.core;
+        const parts = cmd.split(' ');
+        return await invoke('run_command', { args: parts });
+      },
+      writeArtifact: async ({ path, content }) => {
+        const { invoke } = window.__TAURI__.core;
+        return await invoke('write_workspace_artifact', { relativePath: path, content: content });
+      },
+      ingestWiki: async ({ path }) => {
+        const { invoke } = window.__TAURI__.core;
+        return await invoke('run_command', { args: ['wiki', 'ingest', path] });
+      }
+    };
+
+    // Create orchestrator instance
+    const orchestrator = createOrchestrator(runtime);
+
+    // Expose orchestrator globally for use in send()
+    window._orchestrator = orchestrator;
+  </script>
+
   <script>
     tailwind.config = {
       theme: {
@@ -1229,6 +1258,24 @@
           result = aiResult;
           responseText = aiResult.response;
 
+          // Try to save artifact via orchestrator for report-like tasks
+          let artifactSaveInfo = '';
+          if (window._orchestrator) {
+            try {
+              const orchResult = await window._orchestrator.execute({
+                taskText: text,
+                aiResponse: responseText
+              });
+              if (orchResult.artifact.saved) {
+                artifactSaveInfo = `<div class="mt-3 text-[11px] text-emerald-600 flex items-center gap-1"><span>✓</span>已保存到 workspace/${orchResult.artifact.path}</div>`;
+                // Refresh file tree after save
+                setTimeout(() => loadFileTree(), 500);
+              }
+            } catch(e) {
+              window._log && window._log('Orchestrator error:', e);
+            }
+          }
+
           // Update bubble with AI response
           setTimeout(() => {
             const bubble = document.getElementById(aid + '-bubble');
@@ -1251,7 +1298,8 @@
             bubble.innerHTML = `
               <p class="mb-2">${escHtml(text)}</p>
               <div class="text-sm leading-relaxed whitespace-pre-wrap">${_sanitizeAiResponse(responseText)}</div>
-              ${commandsHtml}`;
+              ${commandsHtml}
+              ${artifactSaveInfo}`;
 
             try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
             msgs.scrollTop = msgs.scrollHeight;
