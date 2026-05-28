@@ -176,6 +176,9 @@ class App {
       this.chatView.removeThinking();
       this.chatView.appendAi(response);
       refreshTree();
+
+      // Auto-ingest written files to wiki
+      this.autoIngestToWiki();
     } catch (e) {
       this.chatView.removeThinking();
       const errorMsg = e.message.includes('Failed to fetch')
@@ -186,6 +189,32 @@ class App {
     }
 
     api.onToolCall = null;
+  }
+
+  async autoIngestToWiki() {
+    // Check if wiki is available
+    try {
+      const wikiResult = await invoke('run_command', { args: ['wiki', 'status'] });
+      if (!wikiResult.ok) return;
+
+      // Get workspace files and ingest .md files
+      const lsResult = await invoke('run_command', { args: ['ls', '--json', 'workspace/'] });
+      if (!lsResult.ok || !lsResult.data?.files) return;
+
+      const files = lsResult.data.files.filter(f => f.type === 'file');
+      const mdFiles = files.filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt'));
+
+      for (const file of mdFiles) {
+        try {
+          await invoke('run_command', { args: ['wiki', 'ingest', `workspace/${file.name}`] });
+          logger.info('wiki', `Auto-ingested: ${file.name}`);
+        } catch (e) {
+          // Ignore individual ingest failures
+        }
+      }
+    } catch (e) {
+      logger.debug('wiki', 'Auto-ingest skipped: ' + e.message);
+    }
   }
 
   // Debug View

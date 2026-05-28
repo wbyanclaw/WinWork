@@ -2,7 +2,11 @@
 const SYSTEM_PROMPT = `你是一个文件管理助手。用户描述需求，你通过工具完成文件操作。
 每次只调用一个工具，完成后再决定下一步。
 如果需要查看命令帮助，先调用 help 命令。
-Response in Chinese.`;
+
+重要规则：
+1. 用户创建代码/文档时，必须先用 write 工具保存到工作区，再用 wiki ingest 工具将其索引到知识库
+2. 知识库会自动处理 .md/.txt/.json 等文本文件
+3. 回复使用中文`;
 
 // 工具调用适配器 - 兼容不同 API 平台
 class ToolCallAdapter {
