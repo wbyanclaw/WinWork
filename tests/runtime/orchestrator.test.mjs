@@ -1,6 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createOrchestrator } from '../../src/runtime/orchestrator.js';
+import { createRuntime } from '../../src/runtime/create-runtime.js';
+
+test('createRuntime uses local adapter when Tauri bridge is absent', () => {
+  const runtime = createRuntime({ tauri: null, mode: 'local' });
+  assert.equal(runtime.kind, 'local');
+});
+
+test('createRuntime uses tauri adapter when Tauri bridge is present', () => {
+  const mockTauri = {
+    core: {
+      invoke: async () => ({})
+    }
+  };
+  const runtime = createRuntime({ tauri: mockTauri, mode: 'auto' });
+  assert.equal(runtime.kind, 'tauri');
+});
 
 test('orchestrator persists report artifact before returning success', async () => {
   const writes = [];

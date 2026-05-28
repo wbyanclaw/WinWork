@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build:css": "./node_modules/.bin/tailwindcss -i src/input.css -o src/styles.css --minify"
+    "build:css": "./node_modules/.bin/tailwindcss -i src/input.css -o src/styles.css --minify",
+    "test": "node --test tests/runtime/*.test.mjs",
+    "dev:local": "python3 -m http.server 4173"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

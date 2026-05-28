@@ -1,13 +1,22 @@
 // src/main.js
 // Runtime initialization for winwork
 
-// Import environment service for structured status handling
+// Import runtime adapter for environment and tool operations
+import { createRuntime } from './runtime/create-runtime.js';
 import { normalizeEnvironmentStatus, isEnvironmentReady } from './runtime/environment-service.js';
-
-const { invoke } = window.__TAURI__.core;
 
 // Application state
 let appReady = false;
+let runtime = null;
+
+/**
+ * Boot winwork with the given runtime adapter.
+ * @param {Object} options - Boot options
+ * @param {Object} options.runtime - Runtime adapter to use (optional)
+ */
+function bootWinwork({ runtime: rt } = {}) {
+  runtime = rt || createRuntime({ mode: 'auto' });
+}
 
 /**
  * Initialize the runtime environment.
@@ -16,11 +25,15 @@ let appReady = false;
 async function initRuntime() {
   window._log && window._log('RUNTIME: initializing');
 
+  if (!runtime) {
+    runtime = createRuntime({ mode: 'auto' });
+  }
+
   let envStatus = null;
 
   try {
-    // Get combined environment status using single backend call
-    const raw = await invoke('get_environment_status');
+    // Get combined environment status using runtime adapter
+    const raw = await runtime.getEnvironmentStatus();
     envStatus = normalizeEnvironmentStatus(raw);
     window._log && window._log('RUNTIME: env status received', JSON.stringify(envStatus));
   } catch(e) {
@@ -39,4 +52,12 @@ function isReady() {
   return appReady;
 }
 
-export { initRuntime, normalizeEnvironmentStatus, isEnvironmentReady, isReady };
+/**
+ * Get the current runtime adapter.
+ * @returns {Object} Runtime adapter
+ */
+function getRuntime() {
+  return runtime;
+}
+
+export { bootWinwork, initRuntime, normalizeEnvironmentStatus, isEnvironmentReady, isReady, getRuntime };
