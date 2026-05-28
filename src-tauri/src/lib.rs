@@ -607,6 +607,12 @@ fn read_file(path: String) -> WindResult {
     run_wind(&["--json", "read", &full_path])
 }
 
+/// Write an artifact to workspace via `wind write <path> --content <content>`
+#[tauri::command]
+fn write_workspace_artifact(relative_path: String, content: String) -> WindResult {
+    run_wind(&["write", &relative_path, "--content", &content])
+}
+
 /// Get the wiki directory path
 #[tauri::command]
 fn get_wiki_dir() -> String {
@@ -899,6 +905,7 @@ pub fn run() {
             wiki_ingest,
             wiki_query,
             read_file,
+            write_workspace_artifact,
             get_wiki_dir,
             list_wiki,
             ai_chat,
