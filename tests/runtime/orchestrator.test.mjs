@@ -72,3 +72,15 @@ test('orchestrator uses skill pack default output directory', async () => {
   await orchestrator.execute({ taskText: '写一份调研报告', aiResponse: '# 调研报告' });
   assert.match(writes[0], /^deliverables\/reports\//);
 });
+
+test('orchestrator returns ordered user-visible trace steps', async () => {
+  const runtime = {
+    writeArtifact: async ({ path }) => ({ ok: true, path }),
+    ingestWiki: async () => ({ ok: true }),
+    runTool: async () => ({ ok: true })
+  };
+  const orchestrator = createOrchestrator(runtime);
+  const result = await orchestrator.execute({ taskText: '写一份调研报告', aiResponse: '# 调研报告' });
+
+  assert.deepEqual(result.trace.map(t => t.kind), ['artifact.write', 'wiki.ingest']);
+});

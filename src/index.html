@@ -84,6 +84,7 @@
   <!-- Runtime adapter and orchestrator initialization -->
   <script type="module">
     import { createOrchestrator } from './runtime/orchestrator.js';
+    import { subscribeDebug, clearDebug } from './runtime/debug-log.js';
 
     // Create runtime for Tauri mode
     const runtime = {
@@ -108,6 +109,15 @@
 
     // Expose orchestrator globally for use in send()
     window._orchestrator = orchestrator;
+
+    // Wire debug-log to the debug panel
+    const debugContent = document.getElementById('debugLogContent');
+    if (debugContent) {
+      subscribeDebug((lines) => {
+        debugContent.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+        debugContent.scrollTop = debugContent.scrollHeight;
+      });
+    }
   </script>
 
   <script>
