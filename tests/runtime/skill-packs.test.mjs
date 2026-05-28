@@ -9,9 +9,9 @@ test('report task resolves research_report pack', async () => {
   assert.equal(pack.wiki.auto_ingest, true);
 });
 
-test('quick answer task returns fallback pack', async () => {
+test('quick answer task returns quick_answer pack', async () => {
   const pack = await resolveSkillPack('什么是AI？');
-  assert.equal(pack.name, 'fallback');
+  assert.equal(pack.name, 'quick_answer');
   assert.equal(pack.artifact.required, false);
 });
 

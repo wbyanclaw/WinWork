@@ -11,7 +11,7 @@
   },
   {
     "name": "quick_answer",
-    "match": ["解释", "说明", "是什么", "为什么", "如何"],
+    "match": ["解释", "说明", "什么是", "为什么", "如何"],
     "artifact": { "required": false },
     "wiki": { "auto_ingest": false }
   },
