@@ -47,7 +47,7 @@ export function createOrchestrator(runtime) {
       // After successful write, check if should auto-ingest
       const canIngest = shouldAutoIngest({
         relativePath: artifactPlan.relativePath,
-        autoIngest: true
+        autoIngest: skillPack?.wiki?.auto_ingest ?? true
       });
 
       let wiki = { ingested: false, skipped: !canIngest };
