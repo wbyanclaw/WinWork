@@ -28,10 +28,17 @@ export function createOrchestrator(runtime) {
         return { ok: true, response: aiResponse, artifact: { saved: false }, trace: [] };
       }
 
+      // Ensure the deliverables directory exists before writing
+      await runtime.runTool('mkdir -p deliverables');
+
       const writeResult = await runtime.writeArtifact({
         path: artifactPlan.relativePath,
         content: aiResponse,
       });
+
+      if (!writeResult.ok) {
+        console.error(`[orchestrator] Failed to write artifact: ${artifactPlan.relativePath}`);
+      }
 
       return {
         ok: writeResult.ok,

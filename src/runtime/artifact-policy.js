@@ -6,7 +6,7 @@
  * @param {string} name - The title to slugify
  * @returns {string} A safe filename slug
  */
-function slugify(name = 'untitled') {
+export function slugify(name = 'untitled') {
   return name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'untitled';
 }
 
@@ -29,6 +29,8 @@ export function decideArtifactPlan({ taskText, suggestedTitle }) {
     required: true,
     extension: '.md',
     relativePath: `deliverables/${file}`,
+    // TODO: Implement suffix conflict handling (e.g., "report-1.md", "report-2.md")
+    // when the file already exists. For now, overwrite is acceptable.
     conflict: 'suffix'
   };
 }
