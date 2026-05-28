@@ -1,4 +1,4 @@
-//! State management bridge for winwork.
+//! State management bridge for wind-cli.
 
 use crate::state::{load_state as state_load, save_state as state_save};
 

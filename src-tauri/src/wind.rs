@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::process::{Command as StdCommand, Stdio};
 use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
@@ -105,22 +106,46 @@ pub fn do_upgrade_with_progress(_app: &AppHandle) -> WindResult {
 
     // Parse JSON to get install command
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        if let Some(install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
+        if let Some(_install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
             set_progress("下载中", 30, Some("正在下载最新版本..."));
 
-            // Execute the install command via cmd /c
-            let full_cmd = format!(
-                "powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"",
-                install_cmd
+            // Write install script to temp file to avoid command escaping issues
+            let temp_dir = std::env::temp_dir();
+            let script_path = temp_dir.join("windcli-upgrade.ps1");
+
+            // Clean up any existing script
+            let _ = fs::remove_file(&script_path);
+
+            // Write the install script with UTF-8 BOM for PowerShell compatibility
+            let bom: [u8; 3] = [0xEF, 0xBB, 0xBF];
+            let script_content = format!(
+                "# Wind-cli upgrade script\nirm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 -OutFile $env:TEMP\\windcli-install.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\\windcli-install.ps1 -NoPause\n",
             );
+            let mut full_content = bom.to_vec();
+            full_content.extend_from_slice(script_content.as_bytes());
+
+            if let Err(e) = fs::write(&script_path, &full_content) {
+                set_progress("错误", 100, Some(&format!("创建安装脚本失败: {}", e)));
+                return WindResult {
+                    ok: false,
+                    stdout: String::new(),
+                    stderr: format!("创建安装脚本失败: {}", e),
+                    exit_code: -1,
+                    data: None,
+                };
+            }
 
             set_progress("安装中", 50, Some("正在安装新版本..."));
 
-            let ps_output = add_no_window(&mut StdCommand::new("cmd"))
-                .args(["/c", &full_cmd])
+            // Execute the script via PowerShell
+            let ps_output = add_no_window(&mut StdCommand::new("powershell"))
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", &script_path.to_string_lossy()])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output();
+
+            // Clean up temp script
+            let _ = fs::remove_file(&script_path);
 
             match ps_output {
                 Ok(ps_out) => {
@@ -312,10 +337,81 @@ pub fn get_windcli_path() -> String {
 pub fn run_wind(args: &[&str]) -> WindResult {
     let wind_path = get_windcli_path();
 
+    // Handle ls command specially - need to use --workspace param
+    // --workspace is a GLOBAL option, must come BEFORE the command
+    let is_ls_command = args.iter().any(|&a| a == "ls");
+    let has_workspace = args.contains(&"--workspace");
+
+    let processed_args: Vec<String> = if is_ls_command && !has_workspace {
+        // Find ls position and any path after it
+        let ls_pos = args.iter().position(|&a| a == "ls").unwrap_or(0);
+        let path_after_ls = args.get(ls_pos + 1).and_then(|s| {
+            if s.starts_with("--") { None } else { Some(*s) }
+        });
+
+        // Determine which path to use
+        let target_path = if let Some(p) = path_after_ls {
+            p.to_string()
+        } else {
+            get_workspace_path()
+        };
+
+        // Build: --workspace <path> ls .
+        let mut result: Vec<String> = vec![
+            "--workspace".to_string(),
+            target_path,
+            "ls".to_string(),
+            ".".to_string()
+        ];
+
+        // Insert flags before --workspace (e.g., --json)
+        for arg in args.iter().take(ls_pos) {
+            result.insert(0, arg.to_string());
+        }
+
+        result
+    } else if !has_workspace {
+        // For other commands, add --workspace to ensure wind-cli uses WinWork's workspace
+        let workspace = get_workspace_path();
+        let mut result: Vec<String> = vec![];
+
+        // Find position to insert --workspace (after --json if present, otherwise at beginning)
+        let json_pos = args.iter().position(|&a| a == "--json");
+
+        for (i, arg) in args.iter().enumerate() {
+            result.push(arg.to_string());
+            // Insert --workspace <path> after --json
+            if let Some(pos) = json_pos {
+                if i == pos {
+                    result.push("--workspace".to_string());
+                    result.push(workspace.clone());
+                }
+            }
+        }
+
+        // If no --json, prepend --workspace at position 1
+        if json_pos.is_none() && !result.is_empty() {
+            let first = result.remove(0);
+            result.insert(0, "--workspace".to_string());
+            result.insert(1, workspace);
+            result.insert(2, first);
+        }
+
+        result
+    } else {
+        // Already has --workspace, pass through
+        args.iter().map(|s| s.to_string()).collect()
+    };
+
+    eprintln!("[DIAGNOSTIC] run_wind: wind {}", processed_args.join(" "));
+
+    // Convert Vec<String> to Vec<&str> for Command
+    let arg_refs: Vec<&str> = processed_args.iter().map(|s| s.as_str()).collect();
+
     if which(&wind_path).is_err() {
         if which("windcli").is_ok() {
             let output = add_no_window(&mut StdCommand::new("windcli"))
-                .args(args)
+                .args(&arg_refs)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output();
@@ -331,7 +427,7 @@ pub fn run_wind(args: &[&str]) -> WindResult {
     }
 
     let output = add_no_window(&mut StdCommand::new(&wind_path))
-        .args(args)
+        .args(&arg_refs)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output();
@@ -451,49 +547,54 @@ pub fn get_wind_root() -> std::path::PathBuf {
     }
 }
 
-/// Get workspace path: ~/.local/share/wind/workspace/
+/// Get workspace path from winwork config (default: ~/Documents/WinWork/workspace/)
 pub fn get_workspace_path() -> String {
-    if let Ok(winwork_root) = super::state::winwork_root() {
-        let ws_path = winwork_root.join("current_workspace.txt");
-        if let Ok(content) = std::fs::read_to_string(&ws_path) {
-            let path = std::path::PathBuf::from(content.trim());
-            if path.exists() {
-                return path.to_string_lossy().into_owned();
-            }
-        }
-    }
-    get_wind_root().join("workspace").to_string_lossy().into_owned()
+    crate::state::get_workspace_configured_path()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "~/.winwork/workspace".to_string())
 }
 
-/// Get wiki path: ~/.local/share/wind/wiki/
+/// Get wiki path: <workspace>/wiki/
 pub fn get_workspace_wiki_path() -> String {
+    if let Ok(ws) = crate::state::get_workspace_configured_path() {
+        return ws.join("wiki").to_string_lossy().into_owned();
+    }
     get_wind_root().join("wiki").to_string_lossy().into_owned()
 }
 
 /// Get wiki directory path.
 pub fn get_wiki_dir() -> String {
-    if let Some(proj_dirs) = directories::ProjectDirs::from("com", "wind-cli", "wind") {
-        proj_dirs.data_dir().join("wiki").to_string_lossy().into_owned()
-    } else {
-        "~/.local/share/wind/wiki".to_string()
-    }
+    get_workspace_wiki_path()
 }
 
-/// Get wiki path: ~/.local/share/wind/wiki/
+/// Get wiki path: use configured wiki path from winwork config, fallback to ~/winwork/wiki/
 pub fn get_wiki_path() -> String {
-    get_wind_root().join("wiki").to_string_lossy().into_owned()
+    // First check if wiki path is configured in winwork state (wiki_path.json)
+    if let Ok(state) = crate::state::load_state("wiki_path.json") {
+        if let Some(path) = state.get("path").and_then(|v| v.as_str()) {
+            if !path.is_empty() {
+                return path.to_string();
+            }
+        }
+    }
+    // Also check config.json for wikiPath
+    let config = crate::state::load_config();
+    if let Some(path) = config.get("wikiPath").and_then(|v| v.as_str()) {
+        if !path.is_empty() {
+            return path.to_string();
+        }
+    }
+    // Fallback to default wiki path: ~/winwork/wiki/
+    crate::state::default_wiki_path().to_string_lossy().into_owned()
 }
 
 /// Read file content from the workspace.
 pub fn read_file(path: &str) -> WindResult {
-    let full_path = if std::path::Path::new(path).is_absolute() {
-        path.to_string()
-    } else {
-        let workspace = get_workspace_path();
-        let ws = workspace.trim_end_matches('/');
-        format!("{}/{}", ws, path)
-    };
-    run_wind(&["--json", "read", &full_path])
+    // path is the relative file path like "README.md" or "subdir/file.md"
+    // Use --workspace to specify the working directory
+    let workspace = get_workspace_path();
+    let ws = workspace.trim_end_matches('\\').trim_end_matches('/');
+    run_wind(&["--json", "--workspace", ws, "read", path])
 }
 
 /// List files in a directory (or workspace root if no path provided).
@@ -683,16 +784,44 @@ pub fn do_upgrade() -> WindResult {
 
             // Parse JSON to get install command
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                if let Some(install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
-                    // Execute the install command via cmd /c (allows window to show)
-                    // Use cmd with /c to run the PowerShell command
-                    let full_cmd = format!("powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"", install_cmd);
+                if let Some(_install_cmd) = json.get("install_command").and_then(|v| v.as_str()) {
+                    // Write install script to temp file to avoid command escaping issues
+                    let temp_dir = std::env::temp_dir();
+                    let script_path = temp_dir.join("windcli-upgrade.ps1");
 
-                    let ps_output = add_no_window(&mut StdCommand::new("cmd"))
-                        .args(["/c", &full_cmd])
+                    // Clean up any existing script
+                    let _ = fs::remove_file(&script_path);
+
+                    // Write the install script with UTF-8 BOM for PowerShell compatibility
+                    let bom: [u8; 3] = [0xEF, 0xBB, 0xBF];
+                    let script_content = format!(
+                        "# Wind-cli upgrade script\nirm https://github.com/wbyanclaw/wind-cli/releases/latest/download/install.ps1 -OutFile $env:TEMP\\windcli-install.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\\windcli-install.ps1 -NoPause\n",
+                    );
+                    let mut full_content = bom.to_vec();
+                    full_content.extend_from_slice(script_content.as_bytes());
+
+                    if let Err(e) = fs::write(&script_path, &full_content) {
+                        set_progress("错误", 100, Some(&format!("创建安装脚本失败: {}", e)));
+                        return WindResult {
+                            ok: false,
+                            stdout: String::new(),
+                            stderr: format!("创建安装脚本失败: {}", e),
+                            exit_code: -1,
+                            data: None,
+                        };
+                    }
+
+                    set_progress("下载中", 30, Some("正在下载最新版本..."));
+
+                    // Execute the script via PowerShell
+                    let ps_output = add_no_window(&mut StdCommand::new("powershell"))
+                        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", &script_path.to_string_lossy()])
                         .stdout(Stdio::piped())
                         .stderr(Stdio::piped())
                         .output();
+
+                    // Clean up temp script
+                    let _ = fs::remove_file(&script_path);
 
                     match ps_output {
                         Ok(ps_out) => {
@@ -798,8 +927,73 @@ fn get_windcli_version(path: &str) -> String {
 pub fn run_wind_with_input(args: &[&str], input: &str) -> WindResult {
     let wind_path = get_windcli_path();
 
+    // Handle ls command specially - need to use --workspace param
+    let is_ls_command = args.iter().any(|&a| a == "ls");
+    let has_workspace = args.contains(&"--workspace");
+
+    let processed_args: Vec<String> = if is_ls_command && !has_workspace {
+        let ls_pos = args.iter().position(|&a| a == "ls").unwrap_or(0);
+        let path_after_ls = args.get(ls_pos + 1).and_then(|s| {
+            if s.starts_with("--") { None } else { Some(*s) }
+        });
+
+        let target_path = if let Some(p) = path_after_ls {
+            p.to_string()
+        } else {
+            get_workspace_path()
+        };
+
+        let mut result: Vec<String> = vec![
+            "--workspace".to_string(),
+            target_path,
+            "ls".to_string(),
+            ".".to_string()
+        ];
+
+        for arg in args.iter().take(ls_pos) {
+            result.insert(0, arg.to_string());
+        }
+
+        result
+    } else if !has_workspace {
+        // For other commands (like write), add --workspace to ensure wind-cli uses WinWork's workspace
+        let workspace = get_workspace_path();
+        let mut result: Vec<String> = vec![];
+
+        // Find position to insert --workspace (after --json if present, otherwise at beginning)
+        let json_pos = args.iter().position(|&a| a == "--json");
+
+        for (i, arg) in args.iter().enumerate() {
+            result.push(arg.to_string());
+            // Insert --workspace <path> after --json
+            if let Some(pos) = json_pos {
+                if i == pos {
+                    result.push("--workspace".to_string());
+                    result.push(workspace.clone());
+                }
+            }
+        }
+
+        // If no --json, prepend --workspace at position 1
+        if json_pos.is_none() && !result.is_empty() {
+            let first = result.remove(0);
+            result.insert(0, "--workspace".to_string());
+            result.insert(1, workspace);
+            result.insert(2, first);
+        }
+
+        result
+    } else {
+        args.iter().map(|s| s.to_string()).collect()
+    };
+
+    eprintln!("[DIAGNOSTIC] run_wind_with_input: wind {}", processed_args.join(" "));
+
+    // Convert Vec<String> to Vec<&str> for Command
+    let arg_refs: Vec<&str> = processed_args.iter().map(|s| s.as_str()).collect();
+
     let mut child = add_no_window(&mut StdCommand::new(&wind_path))
-        .args(args)
+        .args(&arg_refs)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

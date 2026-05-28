@@ -1,11 +1,52 @@
 // 命令解析与执行
+
+// 支持新旧两种格式：JSON Actions 和 [Executes: ...]
 const commandParser = {
   parse(text) {
-    // 解析 [Executes: ...] 格式的命令，捕获命令后的内容（用于 write 命令的 stdin）
+    // 优先尝试 JSON 格式
+    const jsonResult = this.parseJsonActions(text);
+    if (jsonResult.length > 0) {
+      return jsonResult;
+    }
+
+    // 回退到旧格式 [Executes: ...]
+    return this.parseLegacyFormat(text);
+  },
+
+  parseJsonActions(text) {
+    try {
+      // 匹配 ```json ... ``` 代码块
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\n```/);
+      if (!jsonMatch) {
+        // 尝试内联 JSON
+        const inlineMatch = text.match(/\{[\s\S]*"actions"[\s\S]*\}/);
+        if (!inlineMatch) return [];
+      }
+
+      const jsonStr = jsonMatch ? jsonMatch[1].trim() : inlineMatch ? inlineMatch[0] : '';
+      if (!jsonStr) return [];
+
+      const parsed = JSON.parse(jsonStr);
+      if (!parsed.actions || !Array.isArray(parsed.actions)) return [];
+
+      return parsed.actions.map(action => ({
+        raw: `${action.type} ${(action.args || []).join(' ')}`,
+        name: action.type,
+        args: action.args || [],
+        stdin: action.stdin || null,
+        fromJson: true
+      }));
+    } catch (e) {
+      console.debug('[command] JSON parse failed, falling back to legacy format');
+      return [];
+    }
+  },
+
+  parseLegacyFormat(text) {
+    // 解析 [Executes: ...] 格式
     const regex = /\[Executes:\s*([^\]]+)\]/g;
     const commands = [];
     let match;
-    let lastIndex = 0;
 
     while ((match = regex.exec(text)) !== null) {
       const cmdStr = match[1].trim();
@@ -13,21 +54,15 @@ const commandParser = {
       const parts = cmdStr.split(/\s+/);
       const cmdName = parts[0];
 
-      // 提取命令后的内容（用于 write 命令）
       let stdin = null;
       if (cmdName === 'write' && match.index < text.length) {
-        // 找到命令结束位置后的内容
         const afterCmd = text.slice(cmdStart).trim();
-
-        // 查找代码块 ```...``` 格式的内容
         const codeBlockMatch = afterCmd.match(/^`{3}[\w]*\n([\s\S]*?)\n`{3}/);
         if (codeBlockMatch) {
           stdin = codeBlockMatch[1];
         } else if (afterCmd.startsWith('```') && afterCmd.endsWith('```')) {
-          // 处理单行代码块
           stdin = afterCmd.slice(3, -3).trim();
         } else if (afterCmd.trim()) {
-          // 如果没有代码块，直接取剩余内容作为 stdin
           stdin = afterCmd;
         }
       }
@@ -36,34 +71,29 @@ const commandParser = {
         raw: cmdStr,
         name: cmdName,
         args: parts.slice(1),
-        stdin: stdin
+        stdin: stdin,
+        fromJson: false
       });
-      lastIndex = regex.lastIndex;
     }
     return commands;
   },
 
   extractWritePath(cmdStr) {
-    // 识别 write 命令并提取路径
     if (!cmdStr.includes('write')) return null;
     const match = cmdStr.match(/write\s+(\S+)/);
     return match ? match[1] : null;
   },
 
   isWikiIngest(cmdStr) {
-    // 识别 wiki ingest 命令
     return cmdStr.includes('wiki') && cmdStr.includes('ingest');
   }
 };
 
 const commandExecutor = {
-  async execute(cmd, stdin = null) {
-    // 对于 write 命令，需要通过 stdin 传递内容
-    if (cmd.startsWith('write ') && stdin !== null) {
-      return await invoke('run_command_with_stdin', { args: cmd.split(/\s+/), stdin });
-    }
-    // 调用 Rust bridge 执行命令
-    return await invoke('run_command', { args: cmd.split(/\s+/) });
+  async execute(raw, stdin = null) {
+    // 拆分原始命令字符串
+    const args = raw.split(/\s+/);
+    return this.executeWithArgs(args, stdin);
   },
 
   async executeWithArgs(args, stdin = null) {

@@ -1,0 +1,10 @@
+/* === Settings Component === */
+.workspace-path-row { display: flex; gap: var(--space-sm); }
+.workspace-path-row input { flex: 1; }
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}

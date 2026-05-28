@@ -1,0 +1,86 @@
+/* === Upgrade Component === */
+.upgrade-modal-content { max-width: 480px; }
+
+.upgrade-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.upgrade-version-info {
+  text-align: center;
+  padding: var(--space-lg);
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+
+.upgrade-progress-container {
+  height: 8px;
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.upgrade-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--color-primary), #3b82f6);
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-slow) ease;
+}
+
+.upgrade-status {
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  padding: var(--space-sm) 0;
+}
+.upgrade-status.progress { color: var(--color-primary); }
+.upgrade-status.complete { color: var(--color-success); font-weight: 500; }
+.upgrade-status.error { color: var(--color-error); }
+.upgrade-status.ready { color: var(--color-warning); font-weight: 500; }
+
+.upgrade-logs {
+  background: var(--color-text);
+  color: #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  font-size: 12px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.upgrade-btn-container { margin-top: var(--space-md); }
+
+.upgrade-action-btn {
+  width: 100%;
+  padding: var(--space-md) 20px;
+  background: linear-gradient(135deg, var(--color-primary), #3b82f6);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
+}
+.upgrade-action-btn:hover {
+  background: linear-gradient(135deg, var(--color-primary-hover), #2563eb);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.4);
+  transform: translateY(-1px);
+}
+
+.upgrade-terminal {
+  background: var(--color-text);
+  color: #22c55e;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.upgrade-terminal.error { color: #ef4444; }

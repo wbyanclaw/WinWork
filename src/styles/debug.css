@@ -1,0 +1,204 @@
+/* === Debug View === */
+.debug-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+.debug-header h2 { margin: 0; font-size: 18px; }
+
+.back-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+}
+.back-btn:hover { background: var(--color-border); }
+
+.clear-btn {
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: auto;
+}
+.clear-btn:hover { color: var(--color-text); }
+
+.debug-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-sm);
+}
+
+.debug-tabs .tab {
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.debug-tabs .tab:hover { background: var(--color-bg); }
+.debug-tabs .tab.active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.debug-content { flex: 1; overflow: auto; }
+
+.tab-content { display: none; }
+.tab-content:not(.hidden) { display: block; }
+
+/* === Debug Entry Cards === */
+.debug-entry {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.debug-entry-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.debug-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+}
+
+.debug-tag.tool {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.debug-time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.debug-entry-content {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  padding: var(--space-sm);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  max-height: 300px;
+  overflow: auto;
+}
+
+/* === Log Entry === */
+.debug-log-entry {
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  margin-bottom: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.debug-log-entry:hover {
+  background: var(--color-bg);
+}
+
+.debug-source {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: var(--space-sm);
+}
+
+.debug-log-msg {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+/* === Environment Info === */
+.debug-env-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.debug-env-section h4 {
+  margin: 0 0 var(--space-md) 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.debug-env-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.debug-env-row:last-child {
+  border-bottom: none;
+}
+
+.debug-env-key {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.debug-env-value {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === Empty State === */
+.debug-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--color-text-muted);
+}
+
+.debug-empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-md);
+  opacity: 0.5;
+}
+
+.debug-empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: var(--space-sm);
+}
+
+.debug-empty-desc {
+  font-size: 13px;
+}

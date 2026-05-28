@@ -21,15 +21,15 @@
     <div class="title-bar-right">
       <div class="version-info">
         <span class="version-badge" id="winwork-version" title="winwork 版本">winwork</span>
-        <span class="version-badge clickable" id="windcli-version" title="wind-cli 版本 (点击检查升级)" onclick="app.checkUpgrade()">wind-cli</span>
-        <span id="update-indicator" class="update-indicator hidden" title="有新版本可用 (点击升级)" onclick="app.performUpgrade()">●</span>
+        <span class="version-badge clickable" id="windcli-version" title="wind-cli 版本 (点击检查升级)" onclick="upgradeComponent.check()">wind-cli</span>
+        <span id="update-indicator" class="update-indicator hidden" title="有新版本可用 (点击升级)" onclick="upgradeComponent.check()">●</span>
       </div>
-      <button class="title-btn" onclick="app.openSettings()" title="API 设置">⚙️</button>
+      <button class="title-btn" onclick="settingsComponent.open()" title="API 设置">⚙️</button>
       <button class="title-btn" onclick="app.openDebug()" title="诊断/日志">🔧</button>
       <div class="window-controls">
-        <button class="win-btn" onclick="winMinimize()" title="最小化">─</button>
-        <button class="win-btn" onclick="winMaximize()" title="最大化">□</button>
-        <button class="win-btn close" onclick="winClose()" title="关闭">×</button>
+        <button class="win-btn" onclick="windowControls.minimize()" title="最小化">─</button>
+        <button class="win-btn" onclick="windowControls.maximize()" title="最大化">□</button>
+        <button class="win-btn close" onclick="windowControls.close()" title="关闭">×</button>
       </div>
     </div>
   </header>
@@ -38,18 +38,37 @@
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <span class="sidebar-title">文件</span>
-        <div class="sidebar-actions">
-          <button class="icon-btn" onclick="refreshTree()" title="刷新">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-          </button>
-          <button class="icon-btn" onclick="openInExplorer()" title="在文件管理器中打开">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-          </button>
+      <div class="sidebar-content">
+        <div class="sidebar-panel" id="panel-workspace">
+          <div class="sidebar-header">
+            <span class="sidebar-title">📁 工作区</span>
+            <div class="sidebar-actions">
+              <button class="icon-btn" onclick="refreshTree('workspace')" title="刷新">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              </button>
+              <button class="icon-btn" onclick="openInExplorer('workspace')" title="在文件管理器中打开">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </button>
+            </div>
+          </div>
+          <div id="file-tree-root" class="file-tree"></div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-panel" id="panel-wiki">
+          <div class="sidebar-header">
+            <span class="sidebar-title">📖 知识库</span>
+            <div class="sidebar-actions">
+              <button class="icon-btn" onclick="refreshTree('wiki')" title="刷新">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              </button>
+              <button class="icon-btn" onclick="openInExplorer('wiki')" title="在文件管理器中打开">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              </button>
+            </div>
+          </div>
+          <div id="wiki-tree-root" class="file-tree"></div>
         </div>
       </div>
-      <div id="file-tree-root" class="file-tree"></div>
       <div class="sidebar-footer">
         <button class="sidebar-btn" onclick="app.newChat()">
           <span class="icon">✨</span>
@@ -65,12 +84,12 @@
         <div class="debug-header">
           <button class="back-btn" onclick="app.closeDebug()">← 返回对话</button>
           <h2>调试视图</h2>
-          <button class="clear-btn" onclick="app.clearLogs()">清除日志</button>
+          <button class="clear-btn" onclick="debugComponent.clear()">清除日志</button>
         </div>
         <div class="debug-tabs">
-          <button class="tab active" data-tab="timeline">操作步骤</button>
-          <button class="tab" data-tab="logs">实时日志</button>
-          <button class="tab" data-tab="env">环境信息</button>
+          <button class="tab active" data-tab="tools">工具调用</button>
+          <button class="tab" data-tab="logs">操作日志</button>
+          <button class="tab" data-tab="env">环境配置</button>
         </div>
         <div class="debug-content">
           <div id="tab-timeline" class="tab-content"></div>
@@ -97,7 +116,7 @@
     <div class="modal-content upgrade-modal-content">
       <div class="modal-header">
         <h2>🔄 wind-cli 升级</h2>
-        <button class="close-btn" onclick="app.closeUpgradeModal()">×</button>
+        <button class="close-btn" onclick="upgradeComponent.closeModal()">×</button>
       </div>
       <div class="upgrade-body">
         <div class="upgrade-version-info" id="upgrade-version-info"></div>
@@ -114,8 +133,22 @@
   <div id="settings-modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>API 设置</h2>
-        <button class="close-btn" onclick="app.closeSettings()">×</button>
+        <h2>设置</h2>
+        <button class="close-btn" onclick="settingsComponent.close()">×</button>
+      </div>
+      <div class="form-group">
+        <label>工作区目录 <span class="label-hint">(文件操作)</span></label>
+        <div class="workspace-path-row">
+          <input type="text" id="workspace-path" placeholder="~/winwork/workspace" readonly>
+          <button class="btn btn-secondary" onclick="settingsComponent.selectWorkspacePath()">浏览</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>知识库目录 <span class="label-hint">(文档索引)</span></label>
+        <div class="workspace-path-row">
+          <input type="text" id="wiki-path" placeholder="~/winwork/wiki" readonly>
+          <button class="btn btn-secondary" onclick="settingsComponent.selectWikiPath()">浏览</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Base URL</label>
@@ -130,11 +163,14 @@
         <input type="text" id="api-model" placeholder="abab6.5s-chat">
       </div>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick="app.closeSettings()">取消</button>
-        <button class="btn-primary" onclick="app.saveSettings()">保存</button>
+        <button class="btn btn-secondary" onclick="settingsComponent.close()">取消</button>
+        <button class="btn btn-primary" onclick="settingsComponent.save()">保存</button>
       </div>
     </div>
   </div>
+
+  <!-- External Libraries -->
+  <script src="js/lib/marked.min.js"></script>
 
   <!-- Scripts -->
   <script src="main.js"></script>
@@ -144,12 +180,15 @@
   <script src="js/core/storage.js"></script>
   <script src="js/core/command.js"></script>
   <script src="js/core/api.js"></script>
+  <script src="js/components/settings.js"></script>
+  <script src="js/components/upgrade.js"></script>
+  <script src="js/components/debug.js"></script>
   <script src="js/ui/status.js"></script>
   <script src="js/ui/sidebar.js"></script>
   <script src="js/ui/file-tree.js"></script>
   <script src="js/ui/chat.js"></script>
   <script src="js/ui/cards.js"></script>
-  <script src="js/ui/debug.js"></script>
+  <script src="js/ui/window.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

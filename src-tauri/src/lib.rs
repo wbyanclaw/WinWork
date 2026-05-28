@@ -97,7 +97,15 @@ async fn select_folder(app: tauri::AppHandle) -> WindResult {
 /// Get current workspace path.
 #[tauri::command]
 fn get_workspace_path() -> String {
-    crate::wind::get_workspace_path()
+    crate::state::get_workspace_configured_path()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "".to_string())
+}
+
+/// Set workspace path.
+#[tauri::command]
+fn set_workspace_path(path: String) -> Result<(), String> {
+    crate::state::set_workspace_path(&path)
 }
 
 /// Get wiki path.
@@ -129,6 +137,18 @@ fn load_state(key: String) -> Result<Option<serde_json::Value>, String> {
     }
 }
 
+/// Load config (returns the full config Map).
+#[tauri::command]
+fn load_config() -> serde_json::Map<String, serde_json::Value> {
+    crate::state::load_config()
+}
+
+/// Save config (replaces the full config).
+#[tauri::command]
+fn save_config(config: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+    crate::state::save_config(&config)
+}
+
 /// Open a URL in the default browser.
 #[tauri::command]
 fn open_url(url: String) -> WindResult {
@@ -156,6 +176,16 @@ fn get_winwork_root() -> String {
     crate::state::winwork_root()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "~/.winwork".to_string())
+}
+
+/// Initialize default files (README.md for workspace and wiki).
+/// Called on first run to create informative default files.
+#[tauri::command]
+fn init_default_files() -> Result<(), String> {
+    if !crate::state::is_first_run() {
+        return Ok(()); // Already initialized
+    }
+    crate::state::create_default_readmes()
 }
 
 /// Ensure a workspace directory exists and return its path.
@@ -195,6 +225,9 @@ fn load_chat_history() -> Result<Vec<serde_json::Value>, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ensure default config exists before starting the app
+    let _ = crate::state::ensure_default_config();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -210,10 +243,13 @@ pub fn run() {
             list_files,
             select_folder,
             get_workspace_path,
+            set_workspace_path,
             get_wiki_path,
             get_winwork_version,
             save_state,
             load_state,
+            load_config,
+            save_config,
             // Utility
             open_url,
             get_winwork_root,
@@ -222,6 +258,7 @@ pub fn run() {
             delete_workspace,
             save_chat_history,
             load_chat_history,
+            init_default_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,11 +1,11 @@
 {
   "name": "winwork",
   "private": true,
-  "version": "0.2.23",
+  "version": "0.2.25",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build:css": "./node_modules/.bin/tailwindcss -i src/input.css -o src/styles.css --minify"
+    "build:css": "powershell -Command \"$files = @('src/styles/variables.css','src/styles/base.css','src/styles/title-bar.css','src/styles/button.css','src/styles/modal.css','src/styles/settings.css','src/styles/upgrade.css','src/styles/layout.css','src/styles/sidebar.css','src/styles/chat.css','src/styles/file-tree.css','src/styles/debug.css'); $content = $files | ForEach-Object { if (Test-Path $_) { Get-Content $_ -Raw } else { Write-Error \\\"Missing: $_\\\"; exit 1 } }; $content | Out-File -FilePath 'src/styles.css' -Encoding UTF8 -NoNewline; Write-Host 'CSS built successfully'\""
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.2",
