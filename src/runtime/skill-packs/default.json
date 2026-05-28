@@ -1,0 +1,28 @@
+[
+  {
+    "name": "research_report",
+    "match": ["报告", "调研", "总结", "周报", "复盘"],
+    "artifact": {
+      "required": true,
+      "default_dir": "deliverables/reports",
+      "extension": ".md"
+    },
+    "wiki": { "auto_ingest": true }
+  },
+  {
+    "name": "quick_answer",
+    "match": ["解释", "说明", "什么是", "为什么", "如何"],
+    "artifact": { "required": false },
+    "wiki": { "auto_ingest": false }
+  },
+  {
+    "name": "notes",
+    "match": ["笔记", "记录", "备忘"],
+    "artifact": {
+      "required": true,
+      "default_dir": "notes",
+      "extension": ".md"
+    },
+    "wiki": { "auto_ingest": true }
+  }
+]

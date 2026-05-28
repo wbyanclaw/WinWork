@@ -3,192 +3,1726 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WinWork</title>
+  <title>winwork</title>
+  <!-- Local CSS (no CDN dependency, works offline/China) -->
   <link rel="stylesheet" href="styles.css">
+  <script>
+    // ── Enhanced Logging System ────────────────────────────────
+    window._logBuffer = [];
+    window._debugVisible = false;
+
+    window._log = function() {
+      var args = Array.from(arguments);
+      var ts = new Date().toISOString().split('T')[1].slice(0,8);
+      var msg = '[winwork ' + ts + '] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      console.log.apply(console, arguments);
+
+      // Buffer logs
+      window._logBuffer.push({ts, msg, type: 'info'});
+      if (window._logBuffer.length > 200) window._logBuffer.shift();
+
+      // Show in debug panel if open
+      if (window._debugVisible) {
+        var logContent = document.getElementById('debugLogContent');
+        if (logContent) {
+          logContent.innerHTML += '<div><span class="timestamp">[' + ts + ']</span> ' + escHtml(args.join(' ')) + '</div>';
+          logContent.scrollTop = logContent.scrollHeight;
+        }
+      }
+    };
+
+    function toggleDebugLog() {
+      var panel = document.getElementById('debugLog');
+      if (!panel) return;
+      window._debugVisible = !window._debugVisible;
+      if (window._debugVisible) {
+        panel.classList.remove('hidden');
+        panel.classList.add('open');
+        var logContent = document.getElementById('debugLogContent');
+        if (logContent) {
+          logContent.innerHTML = window._logBuffer.map(function(l) {
+            return '<div><span class="timestamp">[' + l.ts + ']</span> ' + escHtml(l.msg) + '</div>';
+          }).join('');
+          logContent.scrollTop = logContent.scrollHeight;
+        }
+      } else {
+        panel.classList.add('hidden');
+        panel.classList.remove('open');
+      }
+    }
+
+    window._log('SCRIPT: loaded');
+  </script>
+  <script>
+    // ── Lucide icons with local fallback ─────────────────────────
+    (function() {
+      // Try local first
+      try {
+        // Check if lucide is already loaded globally
+        if (typeof lucide !== 'undefined') {
+          window._lucideReady = true;
+          return;
+        }
+      } catch(e) {}
+
+      // Try loading from CDN, but don't block if it fails
+      var script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
+      script.onload = function() { window._lucideReady = true; window._log && window._log('LUCIDE: loaded from CDN'); };
+      script.onerror = function() {
+        window._lucideReady = false;
+        window._log && window._log('LUCIDE: failed - using emoji fallback');
+        // Show modal icon buttons with emojis as fallback
+        var modalBtnIcon = document.getElementById('modal-btn-icon');
+        if (modalBtnIcon && !modalBtnIcon.textContent) {
+          modalBtnIcon.textContent = '⚡';
+        }
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+  <!-- Runtime adapter and orchestrator initialization -->
+  <script type="module">
+    import { createOrchestrator } from './runtime/orchestrator.js';
+    import { subscribeDebug, clearDebug } from './runtime/debug-log.js';
+
+    // Create runtime for Tauri mode
+    const runtime = {
+      runTool: async (cmd) => {
+        // Dynamically get invoke from Tauri global
+        const { invoke } = window.__TAURI__.core;
+        const parts = cmd.split(' ');
+        return await invoke('run_command', { args: parts });
+      },
+      writeArtifact: async ({ path, content }) => {
+        const { invoke } = window.__TAURI__.core;
+        return await invoke('write_workspace_artifact', { relativePath: path, content: content });
+      },
+      ingestWiki: async ({ path }) => {
+        const { invoke } = window.__TAURI__.core;
+        return await invoke('run_command', { args: ['wiki', 'ingest', path] });
+      }
+    };
+
+    // Create orchestrator instance
+    const orchestrator = createOrchestrator(runtime);
+
+    // Expose orchestrator globally for use in send()
+    window._orchestrator = orchestrator;
+
+    // Wire debug-log to the debug panel
+    if (document.getElementById('debugLogContent')) {
+      subscribeDebug((lines) => {
+        const el = document.getElementById('debugLogContent');
+        if (el) {
+          el.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+    }
+  </script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#1d4ed8',
+            brandLight: '#eff6ff',
+            ink: '#0f172a',
+            muted: '#64748b',
+            faint: '#94a3b8',
+            border: '#e2e8f0',
+            success: '#059669',
+            successBg: '#ecfdf5',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Google Fonts removed for China compatibility */
+    body { font-family: 'Inter', -apple-system, 'PingFang SC', system-ui, sans-serif; }
+    #rightPanel { transform: translateX(100%); transition: transform 0.3s ease; position: absolute; right: 0; top: 0; bottom: 0; z-index: 50; box-shadow: -4px 0 12px rgba(0,0,0,0.1); }
+    #rightPanel.open { transform: translateX(0); }
+    #debugLog { transform: translateY(100%); transition: transform 0.3s ease; position: fixed; bottom: 0; left: 0; right: 0; height: 200px; background: #1a1a2e; color: #0f0; font-family: monospace; font-size: 11px; padding: 8px; overflow-y: auto; z-index: 9999; }
+    #debugLog.open { transform: translateY(0); }
+    #debugLog .timestamp { color: #666; }
+    #debugLog .error { color: #f55; }
+    #debugLog .warn { color: #fa0; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .animate-fade-up { animation: fadeUp 0.3s ease-out forwards; }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    .thinking-dots span { width: 5px; height: 5px; border-radius: 50%; background: #94a3b8; display: inline-block; animation: bounce 1.2s infinite; }
+    .thinking-dots span:nth-child(2) { animation-delay: .15s; }
+    .thinking-dots span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
+    textarea { resize: none; }
+    textarea:focus { outline: none; }
+    .tree-item:hover { background: #f8fafc; }
+    .tree-item.active { background: #eff6ff; color: #1d4ed8; }
+    .detail-tab.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #1d4ed8; }
+    .detail-tab { color: #64748b; }
+    .detail-tab:hover { color: #1d4ed8; }
+    .mode-tab.active { background: white; color: #1d4ed8; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .scenario-btn { transition: all 0.15s; }
+    .scenario-btn:hover { border-color: #1d4ed8; color: #1d4ed8; background: #eff6ff; }
+
+    /* Install modal */
+    #installModal { position: fixed; inset: 0; z-index: 999; background: rgba(15,23,42,0.5); display: flex; align-items: center; justify-content: center; }
+    #installModal.hidden { display: none; }
+    .modal-card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 420px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+  </style>
 </head>
-<body>
-  <!-- Title Bar -->
-  <header class="title-bar" data-tauri-drag-region>
-    <div class="title-bar-left" data-tauri-drag-region>
-      <div class="app-icon">⚡</div>
-      <span class="app-title" data-tauri-drag-region>WinWork</span>
+<body class="bg-slate-100 h-screen flex flex-col overflow-hidden">
+
+<!-- Header (mockup style - no custom window controls) -->
+<header class="h-14 bg-white border-b border-border flex items-center px-4 gap-3 flex-shrink-0 shadow-sm select-none" data-tauri-drag-region>
+  <!-- Logo (draggable area) -->
+  <div class="flex items-center gap-2.5" data-tauri-drag-region>
+    <div class="w-8 h-8 bg-ink rounded-lg flex items-center justify-center">
+      <span class="text-white text-sm" id="header-logo-icon">📁</span>
+    </div>
+    <span class="font-bold text-[15px] text-ink tracking-tight" data-tauri-drag-region>winwork</span>
+  </div>
+  <div class="flex-1" data-tauri-drag-region></div>
+  <!-- Connection Status -->
+  <div id="apiStatusBadge" class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium hidden">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
+    <span id="apiStatusText">API 已连接</span>
+  </div>
+  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v0.2.20</span>
+  <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
+  <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
+  <span id="clickTest" class="text-xs text-green-500 cursor-pointer px-1" onclick="window._log && window._log('CLICK OK'); this.textContent='✓';">[测试]</span>
+  <!-- Diagnostics/Logs button (separate from view details) -->
+  <button onclick="toggleDiagnostics()" id="diagBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-amber-600 border border-border rounded-lg px-3 py-1.5 transition-colors bg-white hover:bg-amber-50">
+    <span class="text-sm">🔍</span>
+    诊断/日志
+  </button>
+  <!-- View Details button -->
+  <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand border border-border rounded-lg px-3 py-1.5 transition-colors bg-white">
+    <span class="text-sm">📋</span>
+    查看详情
+  </button>
+  <!-- Window Controls (non-draggable) -->
+  <div class="flex items-center gap-1 ml-2 -mr-1">
+    <button onclick="winMinimize()" id="btn-minimize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最小化">
+      <svg width="12" height="2" viewBox="0 0 12 2" fill="currentColor"><rect width="12" height="2"/></svg>
+    </button>
+    <button onclick="winMaximize()" id="btn-maximize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最大化">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="10" height="10"/></svg>
+    </button>
+    <button onclick="winClose()" id="btn-close" class="w-8 h-8 flex items-center justify-center rounded hover:bg-red-500 hover:text-white text-muted transition-colors" title="关闭">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 1L11 11M11 1L1 11"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- Environment Install Modal — single button, non-blocking install -->
+<div id="installModal" class="hidden">
+  <div class="modal-card text-center">
+    <!-- App icon -->
+    <div class="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mx-auto mb-5">
+      <span class="w-8 h-8 text-white">📁</span></span>
     </div>
 
-    <div class="title-bar-center" data-tauri-drag-region>
-      <span id="env-status" class="env-status"></span>
-    </div>
+    <!-- Title + subtitle -->
+    <h2 class="text-xl font-bold text-ink mb-1">首次使用，需安装 wind-cli</h2>
+    <p class="text-sm text-muted mb-6">winwork 的核心运行时引擎，安装后即可使用</p>
 
-    <div class="title-bar-right">
-      <div class="version-info">
-        <span class="version-badge" id="winwork-version" title="winwork 版本">winwork</span>
-        <span class="version-badge clickable" id="windcli-version" title="wind-cli 版本 (点击检查升级)" onclick="upgradeComponent.check()">wind-cli</span>
-        <span id="update-indicator" class="update-indicator hidden" title="有新版本可用 (点击升级)" onclick="upgradeComponent.check()">●</span>
+    <!-- Single button (changes based on state) -->
+    <button onclick="handleModalButton()" id="modal-main-btn" class="w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+      <span id="modal-btn-icon"></span>
+      <span id="modal-btn-text">⚡ 一键安装 wind-cli</span>
+    </button>
+
+    <!-- Skip button (always visible as fallback) -->
+    <button onclick="skipAndContinue()" id="skip-btn" class="mt-3 w-full px-4 py-2 text-sm text-muted hover:text-brand border border-border rounded-xl hover:bg-slate-50 transition-colors">
+      跳过 wind-cli，直接进入（部分功能不可用）
+    </button>
+
+    <!-- Windows security note (tiny, below button) -->
+    <p class="text-[11px] text-faint mt-4">
+      安装后若弹出安全警告，点击"仍要运行"即可
+    </p>
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div id="apiKeyModal" class="hidden fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-ink">API 配置</h3>
+      <button onclick="hideApiKeyModal()" class="text-slate-400 hover:text-slate-600">
+        <span class="w-5 h-5">✕</span></span>
+      </button>
+    </div>
+    <p class="text-sm text-muted mb-4">配置 AI 模型以启用智能对话功能（支持 OpenAI/MiniMax/兼容 API）</p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-muted mb-1 block">Base URL</label>
+        <input type="text" id="apiBaseUrlInput" placeholder="https://api.openai.com/v1" class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
       </div>
-      <button class="title-btn" onclick="settingsComponent.open()" title="API 设置">⚙️</button>
-      <button class="title-btn" onclick="app.openDebug()" title="诊断/日志">🔧</button>
-      <div class="window-controls">
-        <button class="win-btn" onclick="windowControls.minimize()" title="最小化">─</button>
-        <button class="win-btn" onclick="windowControls.maximize()" title="最大化">□</button>
-        <button class="win-btn close" onclick="windowControls.close()" title="关闭">×</button>
+      <div>
+        <label class="text-xs text-muted mb-1 block">API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="sk-..." class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">Model</label>
+        <input type="text" id="apiModelInput" placeholder="gpt-4 / MiniMax-M2.7-highspeed" class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
+      </div>
+      <div>
+        <label class="text-xs text-muted mb-1 block">知识库路径 <span class="text-faint font-normal">(留空使用默认)</span></label>
+        <input type="text" id="wikiPathInput" placeholder="留空使用默认路径" class="w-full px-4 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:border-brand">
       </div>
     </div>
-  </header>
+    <div class="flex gap-2 mt-4">
+      <button onclick="clearApiKey()" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">清除</button>
+      <button onclick="saveApiKey()" class="flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700">保存</button>
+    </div>
+  </div>
+</div>
 
-  <!-- Main Container -->
-  <div class="app-container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-content">
-        <div class="sidebar-panel" id="panel-workspace">
-          <div class="sidebar-header">
-            <span class="sidebar-title">📁 工作区</span>
-            <div class="sidebar-actions">
-              <button class="icon-btn" onclick="refreshTree('workspace')" title="刷新">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-              </button>
-              <button class="icon-btn" onclick="openInExplorer('workspace')" title="在文件管理器中打开">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </button>
-            </div>
-          </div>
-          <div id="file-tree-root" class="file-tree"></div>
-        </div>
-        <div class="sidebar-divider"></div>
-        <div class="sidebar-panel" id="panel-wiki">
-          <div class="sidebar-header">
-            <span class="sidebar-title">📖 知识库</span>
-            <div class="sidebar-actions">
-              <button class="icon-btn" onclick="refreshTree('wiki')" title="刷新">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-              </button>
-              <button class="icon-btn" onclick="openInExplorer('wiki')" title="在文件管理器中打开">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              </button>
-            </div>
-          </div>
-          <div id="wiki-tree-root" class="file-tree"></div>
-        </div>
-      </div>
-      <div class="sidebar-footer">
-        <button class="sidebar-btn" onclick="app.newChat()">
-          <span class="icon">✨</span>
-          <span class="label">新对话</span>
+<!-- Debug Log Panel -->
+<div id="debugLog" class="hidden">
+  <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-700">
+    <span class="text-gray-400 text-xs">诊断日志</span>
+    <button onclick="toggleDebugLog()" class="text-gray-400 hover:text-white text-xs">[关闭]</button>
+  </div>
+  <div id="debugLogContent"></div>
+</div>
+
+  <!-- Main -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- Left File Tree -->
+    <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
+      <div class="px-4 py-3 border-b border-border flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
+        <button onclick="toggleDetail()" id="detailBtn" class="flex items-center gap-1 text-[11px] text-muted hover:text-brand transition-colors">
+          <span class="w-3 h-3">▶</span></span>详情
         </button>
+      </div>
+      <div class="flex-1 overflow-y-auto py-2" id="fileTree">
+        <div class="px-3 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span>
+        </div>
+        <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
+      </div>
+      <!-- Wiki Section -->
+      <div class="border-t border-border px-3 py-3">
+        <div class="px-2 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide">知识库</span>
+        </div>
+        <button onclick="doWikiIngest()" id="btn-wiki-ingest" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="w-3.5 h-3.5">📤</span></span>文档入库
+        </button>
+        <button onclick="doWikiLint()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="w-3.5 h-3.5">🔍</span></span>健康检查
+        </button>
+        <div id="wiki-status" class="px-2 py-1 text-[10px] text-faint"></div>
+      </div>
+      <!-- Config Section -->
+      <div class="border-t border-border px-3 py-3">
+        <div class="px-2 pb-1">
+          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide">配置</span>
+        </div>
+        <button onclick="showApiKeyModal()" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-slate-600 hover:bg-slate-50 transition-colors">
+          <span class="w-3.5 h-3.5">⚙️</span></span>API 设置
+        </button>
+        <div id="apiKeyStatus" class="px-2 py-1 text-[10px] text-faint"></div>
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Debug View -->
-      <div id="debug-view" class="debug-view hidden">
-        <div class="debug-header">
-          <button class="back-btn" onclick="app.closeDebug()">← 返回对话</button>
-          <h2>调试视图</h2>
-          <button class="clear-btn" onclick="debugComponent.clear()">清除日志</button>
-        </div>
-        <div class="debug-tabs">
-          <button class="tab active" data-tab="tools">工具调用</button>
-          <button class="tab" data-tab="logs">操作日志</button>
-          <button class="tab" data-tab="env">环境配置</button>
-        </div>
-        <div class="debug-content">
-          <div id="tab-timeline" class="tab-content"></div>
-          <div id="tab-logs" class="tab-content hidden"></div>
-          <div id="tab-env" class="tab-content hidden"></div>
+    <!-- Center: Chat -->
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-50">
+      <div id="messages" class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
+        <div id="welcomeScreen" class="flex-1 flex flex-col items-center justify-center gap-5 text-center">
+          <div class="w-14 h-14 bg-ink rounded-2xl flex items-center justify-center shadow-md">
+            <span class="w-7 h-7 text-white">📁</span></span>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-ink tracking-tight mb-2">winwork</h2>
+            <p class="text-muted text-sm leading-relaxed max-w-xs">描述您的需求，winwork 将自动调用 wind-cli 完成文件操作</p>
+          </div>
+          <!-- Scenario chips - Work operations -->
+          <div class="flex flex-wrap gap-2 justify-center mt-1">
+            <button onclick="runScenario('ls')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5">📋</span> 列出文件
+            </button>
+            <button onclick="runScenario('mkdir')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5">📁</span> 新建目录
+            </button>
+            <button onclick="runScenario('write')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5">✏️</span> 写入文件
+            </button>
+            <button onclick="runScenario('wft')" class="px-4 py-2 bg-white border border-border rounded-full text-sm text-muted hover:border-brand hover:text-brand hover:bg-blue-50 transition-all duration-150 shadow-sm flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5">🔗</span> WFT 打开
+            </button>
+          </div>
+          <!-- Diagnostic operations -->
+          <div class="flex flex-wrap gap-2 justify-center mt-2">
+            <button onclick="doCheckEnv()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>🔍</span> 检查环境
+            </button>
+            <button onclick="doViewLogs()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>📜</span> 查看日志
+            </button>
+            <button onclick="doCheckWikiStatus()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>📚</span> 知识库状态
+            </button>
+            <button onclick="doReloadWorkspace()" class="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1.5">
+              <span>🔄</span> 重载工作区
+            </button>
+          </div>
         </div>
       </div>
-
-      <!-- Chat View -->
-      <div id="messages" class="messages"></div>
-
-      <!-- Input Area -->
-      <footer class="input-area">
-        <textarea id="input" placeholder="描述你的需求..." rows="1"></textarea>
-        <button id="send-btn" onclick="app.send()">
-          <span>发送</span>
-        </button>
-      </footer>
+      <div class="px-8 py-4 bg-white border-t border-border flex-shrink-0">
+        <div class="flex items-end gap-3 bg-slate-50 border border-border rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-brand transition-colors">
+          <textarea id="input" rows="1" placeholder="用自然语言描述您的需求..." onkeydown="handleKey(event)" oninput="resize(this)" class="flex-1 bg-transparent text-sm text-ink placeholder:text-faint outline-none leading-relaxed max-h-24"></textarea>
+          <button onclick="send()" class="w-8 h-8 bg-brand rounded-lg text-white flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors shadow-sm">
+            <span class="w-4 h-4">↑</span></span>
+          </button>
+        </div>
+        <p class="text-[11px] text-faint mt-2 pl-1">winwork 智能理解 · wind-cli 安全执行 · 工作区完全隔离</p>
+      </div>
     </main>
-  </div>
 
-  <!-- Upgrade Modal -->
-  <div id="upgrade-modal" class="modal hidden">
-    <div class="modal-content upgrade-modal-content">
-      <div class="modal-header">
-        <h2>🔄 wind-cli 升级</h2>
-        <button class="close-btn" onclick="upgradeComponent.closeModal()">×</button>
-      </div>
-      <div class="upgrade-body">
-        <div class="upgrade-version-info" id="upgrade-version-info"></div>
-        <div class="upgrade-progress-container">
-          <div class="upgrade-progress-bar" id="upgrade-progress-bar"></div>
+    <!-- Right Detail + Diagnostics Panel -->
+    <aside id="rightPanel" class="w-[420px] bg-white border-l border-border flex flex-col overflow-hidden">
+      <!-- Primary mode toggle: Details / Diagnostics -->
+      <div class="px-5 py-3.5 border-b border-border flex-shrink-0">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+            <button onclick="switchMode('details', this)" class="mode-tab flex items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-medium transition-all active" id="btn-mode-details">
+              <span>📋</span> 详情
+            </button>
+            <button onclick="switchMode('diagnostics', this)" class="mode-tab flex items-center gap-1.5 py-1.5 px-4 rounded-md text-xs font-medium transition-all" id="btn-mode-diagnostics">
+              <span>🔍</span> 诊断
+            </button>
+          </div>
+          <button onclick="toggleDetail()" class="text-faint hover:text-muted transition-colors">
+            <span class="w-4 h-4">✕</span></span>
+          </button>
         </div>
-        <div class="upgrade-status" id="upgrade-status">正在检查更新...</div>
-        <div class="upgrade-logs" id="upgrade-logs"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>设置</h2>
-        <button class="close-btn" onclick="settingsComponent.close()">×</button>
-      </div>
-      <div class="form-group">
-        <label>工作区目录 <span class="label-hint">(文件操作)</span></label>
-        <div class="workspace-path-row">
-          <input type="text" id="workspace-path" placeholder="~/winwork/workspace" readonly>
-          <button class="btn btn-secondary" onclick="settingsComponent.selectWorkspacePath()">浏览</button>
+        <!-- Secondary tabs -->
+        <div id="details-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5">
+          <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-file">文件内容</button>
+          <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-trace">执行链路</button>
+          <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-source">数据溯源</button>
+        </div>
+        <div id="diagnostics-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5 hidden">
+          <button onclick="switchDiagTab('startup', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all active" id="tab-startup">启动日志</button>
+          <button onclick="switchDiagTab('calls', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-calls">调用日志</button>
+          <button onclick="switchDiagTab('error', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-error">错误定位</button>
         </div>
       </div>
-      <div class="form-group">
-        <label>知识库目录 <span class="label-hint">(文档索引)</span></label>
-        <div class="workspace-path-row">
-          <input type="text" id="wiki-path" placeholder="~/winwork/wiki" readonly>
-          <button class="btn btn-secondary" onclick="settingsComponent.selectWikiPath()">浏览</button>
+      <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
+        <!-- Details mode content -->
+        <div id="details-panel">
+          <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
+            <span class="w-8 h-8">ℹ️</span></span>
+            <p class="text-sm">点击对话中的工具卡片<br>查看详情</p>
+          </div>
+          <div id="detail-file" class="hidden"></div>
+          <div id="detail-trace" class="hidden"></div>
+          <div id="detail-source" class="hidden"></div>
+        </div>
+        <!-- Diagnostics mode content -->
+        <div id="diagnostics-panel" class="hidden">
+          <div id="diag-startup" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">启动日志</span>
+              <button onclick="clearLog('startup')" class="text-xs text-faint hover:text-muted">清空</button>
+            </div>
+            <div id="startup-log-content" class="font-mono text-[11px] text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div class="text-faint text-center py-4">暂无启动日志</div>
+            </div>
+          </div>
+          <div id="diag-calls" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">调用日志</span>
+              <button onclick="clearLog('calls')" class="text-xs text-faint hover:text-muted">清空</button>
+            </div>
+            <div id="calls-log-content" class="font-mono text-[11px] text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap max-h-96 overflow-y-auto">
+              <div class="text-faint text-center py-4">暂无调用日志</div>
+            </div>
+          </div>
+          <div id="diag-error" class="hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-muted">错误定位</span>
+            </div>
+            <div id="error-content" class="text-[12px] text-slate-600">
+              <div class="text-faint text-center py-4">无错误记录</div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="form-group">
-        <label>Base URL</label>
-        <input type="text" id="api-base-url" placeholder="https://platform.minimax.com/v1">
-      </div>
-      <div class="form-group">
-        <label>API Key</label>
-        <input type="password" id="api-key" placeholder="输入你的 API Key">
-      </div>
-      <div class="form-group">
-        <label>Model</label>
-        <input type="text" id="api-model" placeholder="abab6.5s-chat">
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="settingsComponent.close()">取消</button>
-        <button class="btn btn-primary" onclick="settingsComponent.save()">保存</button>
-      </div>
-    </div>
+    </aside>
   </div>
 
-  <!-- External Libraries -->
-  <script src="js/lib/marked.min.js"></script>
+  <script>
+    try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
 
-  <!-- Scripts -->
-  <script src="main.js"></script>
-  <script src="js/utils/sanitize.js"></script>
-  <script src="js/utils/format.js"></script>
-  <script src="js/utils/log.js"></script>
-  <script src="js/core/storage.js"></script>
-  <script src="js/core/command.js"></script>
-  <script src="js/core/api.js"></script>
-  <script src="js/components/settings.js"></script>
-  <script src="js/components/upgrade.js"></script>
-  <script src="js/components/debug.js"></script>
-  <script src="js/ui/status.js"></script>
-  <script src="js/ui/sidebar.js"></script>
-  <script src="js/ui/file-tree.js"></script>
-  <script src="js/ui/chat.js"></script>
-  <script src="js/ui/cards.js"></script>
-  <script src="js/ui/window.js"></script>
-  <script src="js/app.js"></script>
+    // ── Runtime Services ────────────────────────────────────────
+    // Import environment service functions from runtime module
+    const parseWindVersion = window.parseWindVersion || ((raw = '') => {
+      const match = raw.match(/(?:wind|windcli)\s+v?(\d+\.\d+\.\d+)/i);
+      return match ? match[1] : null;
+    });
+    const normalizeEnvironmentStatus = window.normalizeEnvironmentStatus || ((input) => {
+      const current = parseWindVersion(input?.windcli?.version ?? '');
+      return {
+        winwork: { version: input?.winworkVersion ?? 'unknown' },
+        windcli: {
+          installed: input?.windcli?.found === 'true',
+          current,
+          latest: current,
+          up_to_date: Boolean(current),
+          path: input?.windcli?.path ?? '',
+          display: current ? `wind-cli ${current}` : 'wind-cli 未安装'
+        },
+        wiki: {
+          available: input?.wiki?.found === 'true',
+          reason: input?.wiki?.reason ?? null
+        }
+      };
+    });
+
+    // ── API Key Storage (obfuscated, not plaintext) ─────────────
+    // Simple XOR obfuscation to prevent casual localStorage reading.
+    // Not real encryption — adequate for demo app; swap for tauri-plugin-store for production.
+    const _apiKeyObfuscationKey = 'winwork_v029_xor';
+    function _xorObfuscate(str) {
+      const k = _apiKeyObfuscationKey;
+      let out = '';
+      for (let i = 0; i < str.length; i++) {
+        out += String.fromCharCode(str.charCodeAt(i) ^ k.charCodeAt(i % k.length));
+      }
+      return btoa(out);
+    }
+    function _xorDeobfuscate(b64) {
+      try {
+        const str = atob(b64);
+        const k = _apiKeyObfuscationKey;
+        let out = '';
+        for (let i = 0; i < str.length; i++) {
+          out += String.fromCharCode(str.charCodeAt(i) ^ k.charCodeAt(i % k.length));
+        }
+        return out;
+      } catch(e) { return ''; }
+    }
+    function _loadApiKey() {
+      const stored = localStorage.getItem('minimax_api_key_obf');
+      return stored ? _xorDeobfuscate(stored) : '';
+    }
+    function _saveApiKey(key) {
+      if (key) localStorage.setItem('minimax_api_key_obf', _xorObfuscate(key));
+      else localStorage.removeItem('minimax_api_key_obf');
+    }
+    function _loadBaseUrl() {
+      return localStorage.getItem('winwork_api_base_url') || 'https://df.dawnloadai.com:9888/v1';
+    }
+    function _saveBaseUrl(url) {
+      localStorage.setItem('winwork_api_base_url', url);
+    }
+    function _loadModel() {
+      return localStorage.getItem('winwork_api_model') || 'MiniMax-M2.7-highspeed';
+    }
+    function _saveModel(model) {
+      localStorage.setItem('winwork_api_model', model);
+    }
+    let apiKey = _loadApiKey();
+    let apiBaseUrl = _loadBaseUrl();
+    let apiModel = _loadModel();
+    updateApiKeyStatus();
+
+    // ── API Key Management ───────────────────────────────────
+    function showApiKeyModal() {
+      document.getElementById('apiKeyModal').classList.remove('hidden');
+      document.getElementById('apiKeyInput').value = apiKey;
+      document.getElementById('apiBaseUrlInput').value = apiBaseUrl;
+      document.getElementById('apiModelInput').value = apiModel;
+      document.getElementById('wikiPathInput').value = appState.wikiPath || '';
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    function hideApiKeyModal() {
+      document.getElementById('apiKeyModal').classList.add('hidden');
+    }
+
+    function saveApiKey() {
+      apiKey = document.getElementById('apiKeyInput').value.trim();
+      apiBaseUrl = document.getElementById('apiBaseUrlInput').value.trim();
+      apiModel = document.getElementById('apiModelInput').value.trim();
+      const wikiPath = document.getElementById('wikiPathInput').value.trim();
+      _saveApiKey(apiKey);
+      _saveBaseUrl(apiBaseUrl);
+      _saveModel(apiModel);
+      appState.wikiPath = wikiPath;
+      saveGlobalState();
+      updateApiKeyStatus();
+      hideApiKeyModal();
+    }
+
+    function clearApiKey() {
+      apiKey = '';
+      _saveApiKey('');
+      document.getElementById('apiKeyInput').value = '';
+      updateApiKeyStatus();
+    }
+
+    function updateApiKeyStatus() {
+      const status = document.getElementById('apiKeyStatus');
+      const btn = document.getElementById('apiKeyBtn');
+      if (apiKey) {
+        status.textContent = 'AI 已启用';
+        btn.classList.add('text-emerald-600');
+      } else {
+        status.textContent = '设置API';
+        btn.classList.remove('text-emerald-600');
+      }
+    }
+
+    // ── File Tree ──────────────────────────────────────────────
+    async function loadFileTree() {
+      const container = document.getElementById('fileTree');
+      if (!container) return;
+
+      try {
+        // Get workspace files with timeout
+        const wsResult = await Promise.race([
+          invoke('list_workspace'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+        // Get wiki files with timeout
+        const wikiResult = await Promise.race([
+          invoke('list_wiki'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+        container.innerHTML = '';
+
+        // Section: 文件 (workspace)
+        const wsSection = document.createElement('div');
+        wsSection.className = 'mb-3';
+        wsSection.innerHTML = '<div class="px-3 pb-1"><span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span></div>';
+
+        // Workspace folder header
+        const wsFolder = document.createElement('div');
+        wsFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+        wsFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📁</span><span>workspace/</span>`;
+        wsSection.appendChild(wsFolder);
+
+        if (wsResult.ok && wsResult.data && wsResult.data.entries && wsResult.data.entries.length > 0) {
+          const entries = wsResult.data.entries;
+          entries.sort((a, b) => {
+            if (a.is_dir && !b.is_dir) return -1;
+            if (!a.is_dir && b.is_dir) return 1;
+            return a.name.localeCompare(b.name);
+          });
+          entries.forEach(entry => {
+            const div = document.createElement('div');
+            div.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-slate-500 hover:bg-slate-50';
+            div.innerHTML = `
+              <span class="w-4 h-4 flex items-center justify-center text-xs">${entry.is_dir ? '📁' : '📄'}</span>
+              <span class="truncate flex-1">${escHtml(entry.name)}</span>
+            `;
+            if (!entry.is_dir) {
+              div.onclick = () => showFileContent(entry.name);
+            }
+            wsSection.appendChild(div);
+          });
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'px-4 py-1 text-xs text-faint';
+          empty.textContent = '(空)';
+          wsSection.appendChild(empty);
+        }
+
+        container.appendChild(wsSection);
+
+        // Divider
+        const divider = document.createElement('div');
+        divider.className = 'mx-4 my-2 border-t border-border';
+        container.appendChild(divider);
+
+        // Section: 知识库 (wiki)
+        const wikiSection = document.createElement('div');
+        wikiSection.innerHTML = '<div class="px-3 pb-1"><span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">知识库</span></div>';
+
+        // Wiki folder header
+        const wikiFolder = document.createElement('div');
+        wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+        wikiFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📖</span><span>wiki/</span>`;
+        wikiSection.appendChild(wikiFolder);
+
+        // Show wiki files if available
+        if (wikiResult.ok && wikiResult.data && wikiResult.data.entries && wikiResult.data.entries.length > 0) {
+          const wikiEntries = wikiResult.data.entries;
+          wikiEntries.forEach(entry => {
+            const div = document.createElement('div');
+            div.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-slate-500 hover:bg-slate-50';
+            div.innerHTML = `
+              <span class="w-4 h-4 flex items-center justify-center text-xs">${entry.is_dir ? '📁' : '📄'}</span>
+              <span class="truncate flex-1">${escHtml(entry.name)}</span>
+            `;
+            wikiSection.appendChild(div);
+          });
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'px-4 py-1 text-xs text-faint';
+          empty.textContent = '(空)';
+          wikiSection.appendChild(empty);
+        }
+
+        container.appendChild(wikiSection);
+      } catch(e) {
+        container.innerHTML = '<div class="px-4 py-2 text-xs text-amber-600">wind-cli 未安装或不可用</div><div class="px-4 py-1 text-xs text-faint">请先安装 wind-cli 或点击"检查环境"</div>';
+        window._log && window._log('loadFileTree failed:', e);
+      }
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    async function showFileContent(filename) {
+      const result = await invoke('read_file', { path: filename });
+      if (result.ok && result.data && result.data.content) {
+        const file = document.getElementById('detail-file');
+        if (file) {
+          file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+        }
+        switchTab('file', document.getElementById('tab-file'));
+      }
+    }
+
+    // ── Window Controls ───────────────────────────────────────
+    async function winMinimize() {
+      try {
+        const win = window.__TAURI__.window.getCurrentWindow();
+        await win.minimize();
+      } catch(e) { window._log && window._log('winMinimize failed:', e); }
+    }
+    async function winMaximize() {
+      try {
+        const win = window.__TAURI__.window.getCurrentWindow();
+        const isMaximized = await win.isMaximized();
+        if (isMaximized) {
+          await win.unmaximize();
+        } else {
+          await win.maximize();
+        }
+      } catch(e) { window._log && window._log('winMaximize failed:', e); }
+    }
+    async function winClose() {
+      try {
+        const win = window.__TAURI__.window.getCurrentWindow();
+        await win.close();
+      } catch(e) { window._log && window._log('winClose failed:', e); }
+    }
+
+    // ── Environment Check ─────────────────────────────────────
+    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.18' };
+
+    async function checkAllEnv() {
+      const statusBar = document.getElementById('envStatusBar');
+      const modal = document.getElementById('installModal');
+
+      let envStatus = null;
+      try {
+        // Get combined environment status using single backend call
+        const raw = await invoke('get_environment_status');
+        envStatus = normalizeEnvironmentStatus(raw);
+        window._log && window._log('environment status:', JSON.stringify(envStatus));
+
+        // Update envState with structured data
+        envState.winworkVersion = envStatus.winwork.version;
+        envState.windcli = envStatus.windcli.installed;
+        envState.windcliPath = envStatus.windcli.path;
+        envState.windcliVersion = envStatus.windcli.current || 'unknown';
+        envState.llmwiki = envStatus.wiki.available;
+
+        // Update version badge in header
+        const verEl = document.getElementById('winworkVersion');
+        if (verEl) verEl.textContent = 'v' + envStatus.winwork.version;
+      } catch(e) {
+        window._log && window._log('get_environment_status failed:', e);
+        // Fallback to individual calls for backward compatibility
+        try {
+          const wwVer = await invoke('get_winwork_version');
+          envState.winworkVersion = wwVer;
+          const verEl = document.getElementById('winworkVersion');
+          if (verEl) verEl.textContent = 'v' + wwVer;
+        } catch(e2) {}
+
+        try {
+          const info = await invoke('check_windcli');
+          envState.windcli = info.found === 'true';
+          envState.windcliPath = info.path || '';
+          const parsed = parseWindVersion(info.version || '');
+          envState.windcliVersion = parsed || 'unknown';
+        } catch(e2) { envState.windcli = false; }
+
+        try {
+          const info = await invoke('check_llm_wiki');
+          envState.llmwiki = info.found === 'true';
+        } catch(e2) { envState.llmwiki = false; }
+      }
+
+      const allReady = envState.windcli && envState.llmwiki;
+
+      // Show diagnostic info in status bar using structured display
+      const windcliDisplay = envStatus?.windcli?.display || `wind-cli ${envState.windcliVersion}`;
+      const diagInfo = `winwork ${envState.winworkVersion} | ${windcliDisplay}`;
+
+      if (allReady) {
+        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>就绪 <span class="text-faint ml-1">${diagInfo}</span></span>`;
+        modal.classList.add('hidden');
+      } else {
+        statusBar.innerHTML = `<span class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-600 text-[11px] px-2 py-0.5 rounded-full font-medium"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>未就绪 <span class="text-faint ml-1">${diagInfo}</span></span>`;
+        modal.classList.remove('hidden');
+        updateModalUI();
+      }
+      return allReady;
+    }
+
+    function updateModalUI() {
+      const btn = document.getElementById('modal-main-btn');
+      const btnText = document.getElementById('modal-btn-text');
+      const btnIcon = document.getElementById('modal-btn-icon');
+      if (!btn) return;
+
+      // Ensure icon span exists (defensive)
+      if (btnIcon) {
+        // Use Lucide if loaded, otherwise emoji fallback
+        if (window._lucideReady && window.lucide) {
+          btnIcon.textContent = '';
+          btnIcon.setAttribute('data-lucide', envState.windcli ? 'arrow-right' : 'zap');
+        } else {
+          btnIcon.textContent = envState.windcli ? '→' : '⚡';
+        }
+      }
+
+      if (!envState.windcli) {
+        // Wind-cli not installed: show install button
+        btn.className = 'w-full bg-brand text-white rounded-xl py-3 text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2';
+        if (btnText) btnText.textContent = '⚡ 一键安装 wind-cli';
+      } else if (!envState.llmwiki) {
+        // wind-cli installed but llm-wiki not ready: show "跳过并继续" button
+        btn.className = 'w-full bg-amber-500 text-white rounded-xl py-3 text-sm font-semibold hover:bg-amber-600 transition-colors flex items-center justify-center gap-2';
+        if (btnText) btnText.textContent = '跳过并继续';
+      } else {
+        // All ready: show enter button
+        btn.className = 'w-full bg-emerald-600 text-white rounded-xl py-3 text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2';
+        if (btnText) btnText.textContent = '开始使用 winwork';
+      }
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    async function handleModalButton() {
+      const btn = document.getElementById('modal-main-btn');
+      const btnText = document.getElementById('modal-btn-text');
+
+      if (!envState.windcli) {
+        // Start installation
+        btn.disabled = true;
+        btnText.textContent = '正在打开下载页...';
+        try {
+          const result = await invoke('trigger_install');
+          if (result.ok) {
+            btnText.textContent = '已在浏览器打开，请下载 wind-cli 安装后重启本应用';
+            btn.disabled = true;
+            // Poll for installation
+            await pollForInstall();
+          } else {
+            btnText.textContent = '安装失败，请手动下载';
+            btn.disabled = false;
+          }
+        } catch(e) {
+          btnText.textContent = '安装失败，请手动下载';
+          btn.disabled = false;
+        }
+      } else {
+        // Wind-cli ready (llm-wiki optional), enter main UI
+        enterMainUI();
+      }
+    }
+
+    async function pollForInstall() {
+      const btnText = document.getElementById('modal-btn-text');
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 1000));
+        // Only check wind-cli, NOT llm-wiki (avoids PowerShell flicker on Windows)
+        try {
+          const info = await invoke('check_windcli');
+          envState.windcli = info.found === 'true';
+        } catch(e) { envState.windcli = false; }
+        if (envState.windcli) {
+          updateModalUI();
+          enterMainUI();
+          return;
+        }
+      }
+      if (btnText) btnText.textContent = '安装超时，请在浏览器下载 wind-cli 后点击上方按钮重试';
+      const btn = document.getElementById('modal-main-btn');
+      if (btn) {
+        btn.disabled = false;
+        btn.onclick = handleModalButton;
+      }
+    }
+
+    function skipAndContinue() {
+      enterMainUI();
+    }
+
+    function enterMainUI() {
+      document.getElementById('installModal').classList.add('hidden');
+    }
+
+    // ESC to close modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.getElementById('installModal').classList.add('hidden');
+      }
+    });
+
+    // ── Wiki ─────────────────────────────────────────────────
+    async function doWikiIngest() {
+      // Use stored wiki path if set, otherwise prompt
+      const storedPath = appState.wikiPath;
+      const path = storedPath || prompt('请输入要入库的文件路径：');
+      if (!path) return;
+      appendMessage('user', `wiki ingest: ${path}`, document.getElementById('messages'));
+      const aid = 'w' + Date.now();
+      appendAgentThinking(aid, document.getElementById('messages'));
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+      try {
+        const result = await invoke('wiki_ingest', { path });
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) {
+          bubble.innerHTML = result.ok
+            ? `<p class="mb-2">文档入库成功 ✅</p><div class="text-xs text-muted">${escHtml(result.stdout || '完成')}</div>`
+            : `<p class="mb-2">入库失败 ❌</p><div class="text-xs text-red-500">${escHtml(result.stderr || result.stdout)}</div>`;
+        }
+      } catch(e) {
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) bubble.innerHTML = `<p>⚠️ 错误: ${escHtml(String(e))}</p>`;
+      }
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    async function doWikiLint() {
+      appendMessage('user', 'wiki lint', document.getElementById('messages'));
+      const aid = 'w' + Date.now();
+      appendAgentThinking(aid, document.getElementById('messages'));
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+      try {
+        const result = await invoke('wiki_lint');
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) {
+          bubble.innerHTML = result.ok
+            ? `<p class="mb-2">知识库健康检查完成</p><div class="font-mono text-xs text-muted whitespace-pre-wrap max-h-64 overflow-y-auto">${escHtml(result.stdout || '无问题')}</div>`
+            : `<p class="mb-2">检查失败 ❌</p><div class="text-xs text-red-500">${escHtml(result.stderr || result.stdout)}</div>`;
+          // Show in detail panel
+          const trace = document.getElementById('detail-trace');
+          if (trace) trace.innerHTML = `<div class="font-mono text-xs text-slate-700 whitespace-pre-wrap">${escHtml(result.stdout || result.stderr || '无输出')}</div>`;
+          document.getElementById('detail-placeholder')?.classList.add('hidden');
+        }
+      } catch(e) {
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) bubble.innerHTML = `<p>⚠️ 错误: ${escHtml(String(e))}</p>`;
+      }
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    // ── Helpers ─────────────────────────────────────────────
+    function displayWindResult(aid, text, result, cmdName) {
+      const bubble = document.getElementById(aid + '-bubble');
+      if (!bubble) return;
+      const cmd = cmdName;
+      bubble.innerHTML = `
+        <p class="mb-2">${escHtml(text)}</p>
+        <div class="mt-2 rounded-lg border border-border overflow-hidden">
+          <div class="bg-slate-50 border-b border-border px-3 py-2 flex items-center gap-1.5">
+            <span class="w-3 h-3 text-brand">⚡</span></span>
+            <span class="text-[11px] text-muted font-medium">wind — ${escHtml(cmd)}</span>
+          </div>
+          <div class="px-3 py-2.5">
+            <div class="flex items-center gap-1.5 mb-2">
+              <span class="text-[10px] ${result.ok ? 'bg-successBg text-success border border-emerald-200' : 'bg-red-50 text-red-500 border border-red-200'} px-1.5 py-0.5 rounded-full font-medium">${result.ok ? '✓ 执行成功' : '✗ 执行失败'}</span>
+            </div>
+            ${result.stdout ? `<div class="font-mono bg-slate-50 border border-border rounded px-2.5 py-1.5 text-[12px] text-brand mb-2 whitespace-pre-wrap">${escHtml(result.stdout)}</div>` : ''}
+            ${result.stderr ? `<div class="text-[11px] text-red-500 mt-1">${escHtml(result.stderr)}</div>` : ''}
+          </div>
+        </div>`;
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+
+      // Update detail panels with step-by-step trace and data provenance
+      const trace = document.getElementById('detail-trace');
+      const source = document.getElementById('detail-source');
+      const placeholder = document.getElementById('detail-placeholder');
+      if (placeholder) placeholder.classList.add('hidden');
+
+      // Step-by-step execution trace
+      const traceSteps = \`
+        <div class="space-y-0">
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 1 · 用户输入</div><div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-[12px] text-slate-700 leading-relaxed">"\${escHtml(text)}"</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-emerald-100 border-2 border-emerald-300 text-emerald-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">2</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 2 · AI 解析意图</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">识别为 <span class="text-brand font-mono">wind \${escHtml(cmd)}</span> 命令</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-amber-100 border-2 border-amber-300 text-amber-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">3</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 3 · wind-cli 执行</div><div class="bg-slate-900 rounded-lg px-3 py-2 text-[11px] text-emerald-400 font-mono">$ wind \${escHtml(cmd)}</div></div>
+          </div>
+          <div class="flex gap-3 mb-4">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-purple-100 border-2 border-purple-300 text-purple-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">4</div><div class="flex-1 w-px bg-border mt-1"></div></div>
+            <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 4 · 返回结果</div><div class="bg-slate-900 rounded-lg px-3 py-2 overflow-x-auto"><pre class="text-[11px] text-slate-300 font-mono whitespace-pre">\${result.ok && result.stdout ? escHtml(result.stdout.slice(0, 500)) : (result.stderr ? escHtml(result.stderr.slice(0, 200)) : '无输出')}</pre></div></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-green-100 border-2 border-green-300 text-green-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">5</div></div>
+            <div class="flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 5 · AI 格式化回复</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">\${result.ok ? '执行成功，结果已格式化' : '执行失败，请检查输入'}</div></div>
+          </div>
+        </div>\`;
+      if (trace) trace.innerHTML = traceSteps;
+
+      // Data provenance panel
+      const sourceContent = \`
+        <div class="text-[11px] font-semibold text-muted mb-3 uppercase tracking-wide">原始数据溯源</div>
+        <div class="space-y-3">
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-brand">↓</span><span class="text-[11px] font-semibold text-muted">输入数据</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">用户输入（原始）</div><div class="font-mono text-[12px] text-slate-700">"\${escHtml(text)}"</div></div>
+          </div>
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-brand">⌨</span><span class="text-[11px] font-semibold text-muted">工具调用</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">wind-cli 命令</div><div class="font-mono text-[12px] text-slate-700 mb-2">wind \${escHtml(cmd)}</div><div class="text-[10px] text-faint mb-1">执行状态</div><div class="font-mono text-[11px] text-slate-500">\${result.ok ? 'exit code: 0 (成功)' : 'exit code: ' + (result.exit_code || '?')}</div></div>
+          </div>
+          <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
+            <div class="px-3 py-2 border-b border-border bg-slate-100 flex items-center gap-2"><span class="w-3.5 h-3.5 text-emerald-500">↑</span><span class="text-[11px] font-semibold text-muted">输出数据</span></div>
+            <div class="p-3"><div class="text-[10px] text-faint mb-1">wind-cli 返回（原始 JSON）</div><div class="font-mono text-[11px] text-slate-700 whitespace-pre">\${result.ok && result.stdout ? escHtml(result.stdout.slice(0, 300)) : (result.stderr ? escHtml(result.stderr.slice(0, 200)) : '无输出')}</div></div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+            <div class="flex items-center gap-2 text-[11px] text-emerald-700 font-medium"><span class="w-3.5 h-3.5">✓</span>安全校验\${result.ok ? '通过' : '失败'}</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>路径隔离：workspace/ 内可访问</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>\${result.ok ? '无路径穿越风险' : '执行异常'}</div>
+            <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>无外部命令注入</div>
+          </div>
+        </div>\`;
+      if (source) source.innerHTML = sourceContent;
+
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── Mode Switching (Details / Diagnostics) ─────────────────
+    let currentMode = 'details';
+    let currentDiagTab = 'startup';
+
+    function switchMode(mode, btn) {
+      currentMode = mode;
+      // Update mode buttons
+      document.querySelectorAll('.mode-tab').forEach(t => {
+        t.classList.remove('active', 'bg-white', 'text-brand', 'shadow-sm');
+        t.classList.add('text-muted');
+      });
+      btn.classList.add('active', 'bg-white', 'text-brand', 'shadow-sm');
+      btn.classList.remove('text-muted');
+
+      // Show/hide secondary tabs
+      document.getElementById('details-tabs').classList.toggle('hidden', mode !== 'details');
+      document.getElementById('diagnostics-tabs').classList.toggle('hidden', mode !== 'diagnostics');
+
+      // Show/hide panels
+      document.getElementById('details-panel').classList.toggle('hidden', mode !== 'details');
+      document.getElementById('diagnostics-panel').classList.toggle('hidden', mode !== 'diagnostics');
+
+      // If switching to diagnostics, show current diag tab
+      if (mode === 'diagnostics') {
+        showDiagTab(currentDiagTab);
+      }
+    }
+
+    function switchDiagTab(tab, btn) {
+      currentDiagTab = tab;
+      document.querySelectorAll('#diagnostics-tabs .detail-tab').forEach(t => {
+        t.classList.remove('active', 'bg-white', 'text-brand', 'shadow-sm');
+        t.classList.add('text-muted');
+      });
+      btn.classList.add('active', 'bg-white', 'text-brand', 'shadow-sm');
+      btn.classList.remove('text-muted');
+
+      document.getElementById('diag-startup').classList.toggle('hidden', tab !== 'startup');
+      document.getElementById('diag-calls').classList.toggle('hidden', tab !== 'calls');
+      document.getElementById('diag-error').classList.toggle('hidden', tab !== 'error');
+    }
+
+    function showDiagTab(tab) {
+      const btn = document.getElementById('tab-' + tab);
+      if (btn) switchDiagTab(tab, btn);
+    }
+
+    function toggleDiagnostics() {
+      // Open right panel and switch to diagnostics mode
+      const panel = document.getElementById('rightPanel');
+      panel.classList.add('open');
+      switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+    }
+
+    // ── Auto-switch to diagnostics on failures ─────────────────
+    function autoSwitchToDiagnostics(type) {
+      if (!document.getElementById('rightPanel').classList.contains('open')) {
+        document.getElementById('rightPanel').classList.add('open');
+      }
+      if (type === 'startup') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('startup');
+      } else if (type === 'call') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('calls');
+      } else if (type === 'error') {
+        switchMode('diagnostics', document.getElementById('btn-mode-diagnostics'));
+        showDiagTab('error');
+      }
+    }
+
+    // ── Log Management ─────────────────────────────────────────
+    const _diagLogs = { startup: [], calls: [], errors: [] };
+
+    function appendLog(type, msg) {
+      const ts = new Date().toISOString().split('T')[1].slice(0,12);
+      _diagLogs[type].push({ts, msg});
+      if (_diagLogs[type].length > 500) _diagLogs[type].shift();
+      renderLog(type);
+    }
+
+    function renderLog(type) {
+      const el = document.getElementById(type + '-log-content');
+      if (!el) return;
+      if (_diagLogs[type].length === 0) {
+        el.innerHTML = '<div class="text-faint text-center py-4">暂无日志</div>';
+        return;
+      }
+      el.innerHTML = _diagLogs[type].map(l => `<div class="py-0.5 border-b border-slate-100 last:border-0"><span class="text-faint mr-2">${l.ts}</span>${escHtml(l.msg)}</div>`).join('');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog(type) {
+      _diagLogs[type] = [];
+      renderLog(type);
+    }
+
+    // Expose log functions globally
+    window.appendStartupLog = (msg) => appendLog('startup', msg);
+    window.appendCallLog = (msg) => appendLog('calls', msg);
+    window.appendErrorLog = (msg) => appendLog('errors', msg);
+
+    function highlightJSON(obj) {
+      const s = JSON.stringify(obj, null, 2);
+      return s
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"([^"]+)":/g, '<span style="color:#1d4ed8">"$1"</span>:')
+        .replace(/: "([^"]+)"/g, ': <span style="color:#059669">"$1"</span>')
+        .replace(/: (true|false)/g, ': <span style="color:#d97706">$1</span>')
+        .replace(/: (\d+)/g, ': <span style="color:#7c3aed">$1</span>');
+    }
+
+    /// Strip AI model internal tokens (<think>...</think>,<think>, etc.)
+    /// so only the actual response is shown to the user.
+    function _sanitizeAiResponse(text) {
+      // Remove XML-style think blocks (e.g. <think>...</think> or (<think>)...(</think>))
+      let s = text
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/\(<think>\)[\s\S]*?\)/gi, '')
+        .replace(/<think>[\s\S]*?/gi, '')
+        .replace(/<\/think>/gi, '');
+      // Trim whitespace
+      s = s.trim();
+      // Escape HTML and convert newlines
+      return escHtml(s).replace(/\n/g, '<br>');
+    }
+
+    function resize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 96) + 'px';
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    }
+
+    // ── Scenario chips handler ─────────────────────────────────
+    function runScenario(key) {
+      const scenarios = {
+        ls: '列出工作区中的所有文件',
+        mkdir: '创建一个新目录',
+        write: '写入一个测试文件',
+        wft: '打开工作区文件'
+      };
+      const inp = document.getElementById('input');
+      inp.value = scenarios[key] || '列出文件';
+      send();
+    }
+
+    // ── Diagnostic helpers ───────────────────────────────────
+    async function doCheckEnv() {
+      appendCallLog('执行环境检查...');
+      try {
+        // Use single get_environment_status call with normalizeEnvironmentStatus
+        const raw = await invoke('get_environment_status');
+        const status = normalizeEnvironmentStatus(raw);
+        const msg = `winwork: ${status.winwork.version}\nwind-cli: ${status.windcli.installed ? '已安装 (' + status.windcli.path + ') v' + status.windcli.current : '未安装'}\n知识库: ${status.wiki.available ? '可用' : '不可用' + (status.wiki.reason ? ' (' + status.wiki.reason + ')' : '')}`;
+        appendCallLog(msg);
+        autoSwitchToDiagnostics('call');
+        // Show result in messages
+        appendMessage('agent', msg, document.getElementById('messages'));
+      } catch(e) {
+        const errMsg = '检查失败: ' + String(e);
+        appendCallLog(errMsg);
+        appendMessage('agent', errMsg, document.getElementById('messages'));
+        autoSwitchToDiagnostics('call');
+      }
+    }
+
+    function doViewLogs() {
+      autoSwitchToDiagnostics('call');
+      appendCallLog('用户请求查看日志');
+    }
+
+    async function doCheckWikiStatus() {
+      appendCallLog('检查知识库状态...');
+      autoSwitchToDiagnostics('startup');
+      try {
+        const result = await invoke('wiki_status');
+        appendCallLog('wiki status: ' + (result.stdout || result.stderr || '完成'));
+      } catch(e) {
+        appendCallLog('错误: ' + String(e));
+      }
+      autoSwitchToDiagnostics('startup');
+    }
+
+    async function doReloadWorkspace() {
+      appendCallLog('重载工作区...');
+      await loadFileTree();
+      appendCallLog('工作区已重载');
+      autoSwitchToDiagnostics('startup');
+    }
+
+    // ── Command router ───────────────────────────────────────
+    function routeCommand(text) {
+      const t = text.toLowerCase();
+      if (t.includes('列出') || t.includes('list') || t.includes('ls') || t.includes('文件')) return 'ls';
+      if (t.includes('创建') || t.includes('mkdir') || t.includes('目录') || t.includes('新建')) return 'mkdir';
+      if (t.includes('写') || t.includes('put') || t.includes('创建文件')) return 'write';
+      if (t.includes('wft') || t.includes('打开') || t.includes('open')) return 'wft';
+      if (t.includes('知识库查询') || t.includes('wiki query') || t.includes('查知识')) return 'wiki_query';
+      if (t.includes('知识库入库') || t.includes('wiki ingest') || t.includes('文档入库')) return 'wiki_ingest';
+      if (t.includes('wiki lint') || t.includes('健康检查') || t.includes('wiki status')) return 'wiki_status';
+      return 'ls'; // default
+    }
+
+    function buildArgs(key, text) {
+      switch (key) {
+        case 'ls': return ['ls'];  // Backend will add --json and workspace path
+        case 'write': return ['write', 'test.txt', '--stdin'];
+        case 'wiki_status': return ['wiki', 'status'];  // Backend handles --json
+        case 'wiki_lint': return ['wiki', 'lint'];  // Backend handles --json
+        default: return ['ls'];  // Backend will add --json and workspace path
+      }
+    }
+
+    // ── Send ─────────────────────────────────────────────────
+    async function send() {
+      const inp = document.getElementById('input');
+      const text = inp.value.trim();
+      if (!text) return;
+      inp.value = '';
+      resize(inp);
+
+      const msgs = document.getElementById('messages');
+      document.getElementById('welcomeScreen')?.remove();
+
+      // Human message
+      appendMessage('user', text, msgs);
+      const aid = 'm' + Date.now();
+
+      // Thinking state
+      appendAgentThinking(aid, msgs);
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+      msgs.scrollTop = msgs.scrollHeight;
+
+      try {
+        let result;
+        let responseText;
+
+        if (apiKey) {
+          // Use AI chat mode
+          const aiResult = await invoke('ai_chat', { message: text, apiKey: apiKey, baseUrl: apiBaseUrl, model: apiModel });
+          result = aiResult;
+          responseText = aiResult.response;
+
+          // Try to save artifact via orchestrator for report-like tasks
+          let artifactSaveInfo = '';
+          if (window._orchestrator) {
+            try {
+              const orchResult = await window._orchestrator.execute({
+                taskText: text,
+                aiResponse: responseText
+              });
+              if (orchResult.artifact.saved) {
+                artifactSaveInfo = `<div class="mt-3 text-[11px] text-emerald-600 flex items-center gap-1"><span>✓</span>已保存到 workspace/${orchResult.artifact.path}</div>`;
+                // Show wiki ingest result
+                if (orchResult.wiki?.ingested) {
+                  artifactSaveInfo += `<div class="mt-1 text-[11px] text-blue-600 flex items-center gap-1"><span>✓</span>已自动加入知识库</div>`;
+                }
+                // Refresh file tree after save
+                setTimeout(() => loadFileTree(), 500);
+              }
+            } catch(e) {
+              window._log && window._log('Orchestrator error:', e);
+            }
+          }
+
+          // Update bubble with AI response
+          setTimeout(() => {
+            const bubble = document.getElementById(aid + '-bubble');
+            if (!bubble) return;
+
+            let commandsHtml = '';
+            if (aiResult.commands_executed && aiResult.commands_executed.length > 0) {
+              commandsHtml = '<div class="mt-3 space-y-2">';
+              aiResult.commands_executed.forEach((cmd, i) => {
+                const cmdResult = aiResult.command_results[i];
+                commandsHtml += `
+                  <div class="bg-slate-50 border border-border rounded-lg px-3 py-2">
+                    <div class="font-mono text-[11px] text-brand mb-1">$ wind ${escHtml(cmd)}</div>
+                    ${cmdResult.ok ? '<span class="text-[10px] text-emerald-600">✓ 成功</span>' : '<span class="text-[10px] text-red-500">✗ 失败</span>'}
+                  </div>`;
+              });
+              commandsHtml += '</div>';
+            }
+
+            bubble.innerHTML = `
+              <p class="mb-2">${escHtml(text)}</p>
+              <div class="text-sm leading-relaxed whitespace-pre-wrap">${_sanitizeAiResponse(responseText)}</div>
+              ${commandsHtml}
+              ${artifactSaveInfo}`;
+
+            try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+            msgs.scrollTop = msgs.scrollHeight;
+          }, 500);
+        } else {
+          // Use keyword routing mode
+          const key = routeCommand(text);
+
+          // Dedicated commands use their own Tauri invocations
+          if (key === 'wiki_query') {
+            const question = text.replace(/知识库查询|wiki query|查知识/gi, '').trim() || '介绍你自己';
+            result = await invoke('wiki_query', { question });
+            displayWindResult(aid, text, result, 'wiki query');
+          } else if (key === 'wiki_ingest') {
+            const m = text.match(/(?:知识库入库|wiki ingest|文档入库)[:：]?\s*(\S+)/i);
+            const path = m ? m[1] : prompt('请输入要入库的文件路径：');
+            if (!path) { document.getElementById(aid + '-bubble').innerHTML = '<p>已取消</p>'; return; }
+            result = await invoke('wiki_ingest', { path });
+            displayWindResult(aid, text, result, 'wiki ingest');
+          } else if (key === 'mkdir') {
+            // Extract path with simple token grab (no fragile regex split)
+            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
+            const path = tokens[tokens.length - 1] || 'newdir';
+            result = await invoke('mkdir_dir', { path });
+            displayWindResult(aid, text, result, 'mkdir');
+          } else if (key === 'wft') {
+            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
+            const file = tokens[tokens.length - 1] || 'test.txt';
+            result = await invoke('wft_open', { file });
+            displayWindResult(aid, text, result, 'wft');
+          } else {
+            const args = buildArgs(key, text);
+            result = await invoke('run_wind_command', { args });
+            displayWindResult(aid, text, result, args[0]);
+          }
+        }
+
+        lastResult = result;
+      } catch (e) {
+        const bubble = document.getElementById(aid + '-bubble');
+        if (bubble) {
+          bubble.innerHTML = `<p>⚠️ 无法执行命令: ${escHtml(String(e))}</p>`;
+        }
+      }
+    }
+
+    function appendMessage(role, text, container) {
+      const div = document.createElement('div');
+      div.className = `msg ${role} animate-fade-up flex gap-2.5 max-w-2xl ${role === 'user' ? 'ml-auto' : ''}`;
+      if (role === 'user') {
+        div.innerHTML = `<div class="flex-1 flex flex-col items-end gap-1"><span class="text-[10px] text-faint px-1">你</span><div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div><div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-white">👤</span></span></div>`;
+      } else {
+        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div>`;
+      }
+      container.appendChild(div);
+    }
+
+    function appendAgentThinking(aid, container) {
+      const div = document.createElement('div');
+      div.id = aid;
+      div.className = 'msg agent animate-fade-up flex gap-2.5 max-w-2xl';
+      div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm" id="${aid}-bubble"><div class="flex items-center gap-1.5 text-[11px] text-faint mt-1.5"><div class="thinking-dots"><span></span><span></span><span></span></div>正在调用 wind-cli 工具...</div></div></div>`;
+      container.appendChild(div);
+    }
+
+    // ── Detail Panel ─────────────────────────────────────────
+    // (detail-file / detail-trace / detail-source panels are updated by displayWindResult)
+
+    // ── Detail panel tab switching ───────────────────────────
+    function switchTab(name, btn) {
+      document.querySelectorAll('.detail-content').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.detail-tab').forEach(t => {
+        t.classList.remove('active');
+        t.classList.add('text-muted');
+      });
+      const panel = document.getElementById('detail-' + name);
+      if (panel) panel.classList.remove('hidden');
+      if (btn) {
+        btn.classList.add('active', 'text-brand', 'bg-white');
+        btn.classList.remove('text-muted');
+        btn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+      }
+    }
+
+    // ── Detail panel open/close ───────────────────────────────
+    function toggleDetail() {
+      const panel = document.getElementById('rightPanel');
+      const btn = document.getElementById('detailBtn');
+      if (!panel) return;
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        btn.innerHTML = '<span class="w-3.5 h-3.5">✕</span></span>收起详情';
+        btn.style.color = 'var(--brand)';
+        btn.style.borderColor = 'var(--brand)';
+      } else {
+        btn.innerHTML = '<span class="w-3.5 h-3.5">▶</span></span>查看详情';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      }
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+    }
+
+    // ── Tauri invoke wrapper with timeout ────────────────────────
+    async function invoke(cmd, args = {}, timeoutMs = 10000) {
+      if (typeof window.__TAURI__ !== 'undefined') {
+        const { invoke: tauriInvoke } = window.__TAURI__.core;
+        const timeoutPromise = new Promise((resolve) =>
+          setTimeout(() => resolve({ _timeout: true, cmd, timeoutMs }), timeoutMs)
+        );
+        try {
+          const result = await Promise.race([tauriInvoke(cmd, args), timeoutPromise]);
+          if (result === null || result === undefined) {
+            window._log && window._log(`invoke ${cmd} returned null`);
+            return { ok: false, stderr: `invoke null: ${cmd}`, stdout: '', exit_code: -1, data: null };
+          }
+          if (result._timeout) {
+            window._log && window._log(`invoke ${cmd} timed out after ${timeoutMs}ms`);
+            return { ok: false, stderr: `invoke timeout: ${cmd} (>${timeoutMs}ms)`, stdout: '', exit_code: -1, data: null };
+          }
+          return result;
+        } catch(e) {
+          // Handle errors gracefully - don't crash on malformed errors
+          const errMsg = e && typeof e === 'object' ? (e.message || String(e)) : String(e || 'unknown error');
+          window._log && window._log(`invoke ${cmd} failed:`, errMsg);
+          return { ok: false, stderr: errMsg, stdout: '', exit_code: -1, data: null };
+        }
+      } else {
+        // Fallback: simulate for browser dev
+        return { ok: true, data: { entries: [] }, stderr: '' };
+      }
+    }
+
+    // ==========================================================================
+    // State Persistence — winwork v0.2
+    // Storage: Tauri backend → ~/.winwork/ (via save_state / load_state)
+    // Layout:
+    //   ~/.winwork/state.json          — global: active workspace
+    //   ~/.winwork/workspaces/<name>/chat.json    — chat history
+    //   ~/.winwork/workspaces/<name>/tree_state.json — file tree state
+    //   ~/.winwork/workspaces/<name>/settings.json  — workspace settings
+    // ==========================================================================
+
+    // Current app state (in-memory)
+    let appState = {
+      activeWorkspace: 'default',
+      workspaces: [],
+      rightPanelTab: 'trace',
+      wikiPath: '', // empty = use default wind wiki path
+      // chatMessages: [], // loaded dynamically
+    };
+
+    // Load global state.json and initialize default workspace on first launch
+    async function loadAppState() {
+      try {
+        const state = await invoke('load_state', { relativePath: 'state.json' });
+        if (state && state !== null && typeof state === 'object') {
+          appState.activeWorkspace = state.activeWorkspace || 'default';
+          appState.rightPanelTab = state.rightPanelTab || 'trace';
+          appState.wikiPath = state.wikiPath || '';
+        }
+      } catch(e) {
+        // state.json doesn't exist yet — use defaults
+        appState.activeWorkspace = 'default';
+      }
+
+      // Ensure default workspace exists
+      try {
+        await invoke('ensure_workspace_dir', { name: appState.activeWorkspace });
+      } catch(e) {}
+
+      // Load workspace-level state
+      await loadWorkspaceState();
+
+      // Restore right panel tab
+      const tabId = 'tab-' + appState.rightPanelTab;
+      const tabBtn = document.getElementById(tabId);
+      if (tabBtn) switchTab(appState.rightPanelTab, tabBtn);
+    }
+
+    // Load chat history and tree state for the active workspace
+    async function loadWorkspaceState() {
+      const ws = appState.activeWorkspace;
+      try {
+        const chat = await invoke('load_state', { relativePath: `workspaces/${ws}/chat.json` });
+        if (chat && chat !== null && Array.isArray(chat.messages)) {
+          restoreChatHistory(chat.messages);
+        }
+      } catch(e) {}
+
+      try {
+        const tree = await invoke('load_state', { relativePath: `workspaces/${ws}/tree_state.json` });
+        if (tree && tree !== null) {
+          // tree expansion state will be used when loadFileTree renders items
+          window._treeState = tree.expanded || [];
+        }
+      } catch(e) {}
+    }
+
+    // Restore chat history from persisted messages array
+    function restoreChatHistory(messages) {
+      const container = document.getElementById('messages');
+      if (!container) return;
+      document.getElementById('welcomeScreen')?.remove();
+      messages.forEach(msg => {
+        if (msg.role === 'user') {
+          appendMessage('user', msg.text, container);
+        } else {
+          appendMessage('agent', msg.text, container);
+        }
+      });
+    }
+
+    // Save current chat messages to the active workspace
+    async function saveChatHistory() {
+      const container = document.getElementById('messages');
+      if (!container) return;
+      const bubbles = container.querySelectorAll('.msg');
+      const messages = [];
+      bubbles.forEach(bubble => {
+        if (bubble.classList.contains('user')) {
+          const text = bubble.querySelector('.bg-brand')?.textContent?.trim() || '';
+          if (text) messages.push({ role: 'user', text });
+        } else if (bubble.classList.contains('agent') || (bubble.querySelector('.bg-white') && !bubble.classList.contains('user'))) {
+          const text = bubble.querySelector('.bg-white')?.textContent?.trim() ||
+                       bubble.querySelector('[id$="-bubble"]')?.textContent?.trim() || '';
+          if (text) messages.push({ role: 'agent', text });
+        }
+      });
+      try {
+        await invoke('save_state', {
+          relativePath: `workspaces/${appState.activeWorkspace}/chat.json`,
+          data: { messages }
+        });
+      } catch(e) {
+        console.error('Failed to save chat history:', e);
+      }
+    }
+
+    // Save right panel tab state (per workspace)
+    async function saveRightPanelTab(tabName) {
+      appState.rightPanelTab = tabName;
+      try {
+        await invoke('save_state', {
+          relativePath: `workspaces/${appState.activeWorkspace}/settings.json`,
+          data: { rightPanelTab: tabName }
+        });
+      } catch(e) {
+        console.error('Failed to save right panel tab:', e);
+      }
+    }
+
+    // Update global state (active workspace + wiki path)
+    async function saveGlobalState() {
+      try {
+        await invoke('save_state', {
+          relativePath: 'state.json',
+          data: {
+            activeWorkspace: appState.activeWorkspace,
+            rightPanelTab: appState.rightPanelTab,
+            wikiPath: appState.wikiPath,
+          }
+        });
+      } catch(e) {
+        console.error('Failed to save global state:', e);
+      }
+    }
+
+    // Switch active workspace
+    async function switchWorkspace(name) {
+      if (name === appState.activeWorkspace) return;
+      // Save current chat before switching
+      await saveChatHistory();
+      appState.activeWorkspace = name;
+      try {
+        await invoke('ensure_workspace_dir', { name });
+      } catch(e) {}
+      await saveGlobalState();
+      await loadWorkspaceState();
+      await loadFileTree();
+    }
+
+    // Patch appendMessage to auto-save chat after each message
+    const _origAppendMessage = appendMessage;
+    appendMessage = function(role, text, container) {
+      _origAppendMessage(role, text, container);
+      // Debounced save — don't block UI
+      clearTimeout(window._chatSaveTimer);
+      window._chatSaveTimer = setTimeout(() => saveChatHistory(), 2000);
+    };
+
+    // Patch switchTab to persist tab selection per workspace
+    const _origSwitchTab = switchTab;
+    switchTab = function(name, btn) {
+      _origSwitchTab(name, btn);
+      saveRightPanelTab(name);
+    };
+
+    // ── Init (updated for persistence) ───────────────────────
+    async function init() {
+      window._log('INIT: starting');
+      updateStatusBar('loading', '正在启动...');
+      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
+
+      // Run env check with timeout - don't block entire init
+      try {
+        updateStatusBar('loading', '检查环境...');
+        await Promise.race([
+          checkAllEnv(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('env check timeout')), 8000))
+        ]);
+        window._log('INIT: env check done');
+      } catch(e) {
+        window._log && window._log('INIT: env check failed/timeout:', e.message);
+        // Continue anyway - modal will handle missing env
+        envState = { windcli: false, llmwiki: false };
+      }
+
+      // Load app state with timeout
+      try {
+        updateStatusBar('loading', '加载状态...');
+        await Promise.race([
+          loadAppState(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('load state timeout')), 5000))
+        ]);
+        window._log('INIT: state loaded');
+      } catch(e) {
+        window._log && window._log('INIT: state load failed:', e.message);
+      }
+
+      // Ensure workspace init completes before entering UI
+      try {
+        updateStatusBar('loading', '初始化工作区...');
+        await Promise.race([
+          initWorkspace(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('init workspace timeout')), 10000))
+        ]);
+        window._log('INIT: workspace ready');
+      } catch(e) {
+        window._log && window._log('INIT: workspace init failed/timeout:', e.message);
+      }
+
+      // Load file tree with timeout
+      try {
+        updateStatusBar('loading', '加载文件...');
+        await Promise.race([
+          loadFileTree(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('load file tree timeout')), 5000))
+        ]);
+      } catch(e) {
+        window._log && window._log('INIT: file tree load failed:', e.message);
+      }
+
+      // Always enter main UI — modal visibility is already controlled by checkAllEnv()
+      enterMainUI();
+
+      updateStatusBar('ready', '就绪');
+      window._log('INIT: complete');
+    }
+
+    // ── Workspace Initialization ─────────────────────────────
+    async function initWorkspace() {
+      try {
+        const result = await invoke('init_demo_workspace');
+        if (result && !result.ok) {
+          window._log && window._log('initWorkspace: wind init 失败', result.stderr);
+        } else {
+          window._log && window._log('initWorkspace: workspace 初始化成功');
+        }
+      } catch(e) {
+        window._log && window._log('initWorkspace: 异常', e);
+      }
+    }
+
+    // ── Status Bar Helper ────────────────────────────────────────
+    function updateStatusBar(state, message) {
+      const statusBar = document.getElementById('envStatusBar');
+      if (!statusBar) return;
+      window._log && window._log('状态:', state, message);
+      let colorClass = 'text-faint';
+      let bgClass = 'bg-slate-50';
+      let borderClass = 'border-border';
+      let dotColor = 'bg-slate-400';
+      switch(state) {
+        case 'loading': colorClass='text-amber-600'; bgClass='bg-amber-50'; borderClass='border-amber-200'; dotColor='bg-amber-400 pulse-dot'; break;
+        case 'ready': colorClass='text-emerald-600'; bgClass='bg-emerald-50'; borderClass='border-emerald-200'; dotColor='bg-emerald-500'; break;
+        case 'error': colorClass='text-red-600'; bgClass='bg-red-50'; borderClass='border-red-200'; dotColor='bg-red-500'; break;
+      }
+      statusBar.innerHTML = `
+        <span class="flex items-center gap-1.5 ${bgClass} border ${borderClass} ${colorClass} text-[11px] px-2 py-0.5 rounded-full font-medium">
+          <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+          ${escHtml(message)}
+        </span>
+        <button onclick="toggleDebugLog()" class="text-[10px] text-faint hover:text-muted ml-1" title="查看日志">[日志]</button>
+      `;
+    }
+
+    // ── Start ─────────────────────────────────────────────────
+    // Global error handler for uncaught exceptions
+    window.addEventListener('error', function(e) {
+      window._log('JS ERROR:', e.message, '@', e.filename, 'line', e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      window._log('UNHANDLED PROMISE REJECTION:', String(e.reason));
+    });
+
+    try { init(); } catch(e) { window._log('INIT: FATAL:', e.message, e.stack); }
+  </script>
 </body>
 </html>
+
