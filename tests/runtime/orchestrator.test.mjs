@@ -44,3 +44,15 @@ test('orchestrator auto-ingests markdown artifact after save', async () => {
   assert.equal(ingested, true);
   assert.equal(result.wiki.ingested, true);
 });
+
+test('orchestrator uses skill pack default output directory', async () => {
+  const writes = [];
+  const runtime = {
+    runTool: async () => ({ ok: true }),
+    writeArtifact: async ({ path }) => { writes.push(path); return { ok: true, path }; },
+    ingestWiki: async () => ({ ok: true })
+  };
+  const orchestrator = createOrchestrator(runtime);
+  await orchestrator.execute({ taskText: '写一份调研报告', aiResponse: '# 调研报告' });
+  assert.match(writes[0], /^deliverables\/reports\//);
+});

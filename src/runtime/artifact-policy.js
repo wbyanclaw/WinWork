@@ -18,21 +18,32 @@ export function slugify(name = 'untitled') {
  * @param {Object} params - Decision parameters
  * @param {string} params.taskText - The original task text from user
  * @param {string} [params.suggestedTitle] - Suggested title for the artifact
+ * @param {Object} [params.skillPack] - Optional skill pack with artifact config
  * @returns {Object} Artifact plan with required flag, extension, path, etc.
  */
-export function decideArtifactPlan({ taskText, suggestedTitle }) {
-  const reportLike = /报告|总结|周报|方案|调研|文档/i.test(taskText);
-  if (!reportLike) return { required: false };
+export function decideArtifactPlan({ taskText, suggestedTitle, skillPack }) {
+  // Check if skill pack overrides artifact requirements
+  const artifactConfig = skillPack?.artifact;
+  if (artifactConfig?.required === false) {
+    return { required: false };
+  }
 
-  const file = `${slugify(suggestedTitle || '交付物')}.md`;
-  return {
-    required: true,
-    extension: '.md',
-    relativePath: `deliverables/${file}`,
-    // TODO: Implement suffix conflict handling (e.g., "report-1.md", "report-2.md")
-    // when the file already exists. For now, overwrite is acceptable.
-    conflict: 'suffix'
-  };
+  const reportLike = /报告|总结|周报|方案|调研|文档/i.test(taskText);
+
+  // Use skill pack directory if available, otherwise check report-like detection
+  if (artifactConfig?.required || reportLike) {
+    const defaultDir = artifactConfig?.default_dir || 'deliverables';
+    const extension = artifactConfig?.extension || '.md';
+    const file = `${slugify(suggestedTitle || '交付物')}${extension}`;
+    return {
+      required: true,
+      extension,
+      relativePath: `${defaultDir}/${file}`,
+      conflict: 'suffix'
+    };
+  }
+
+  return { required: false };
 }
 
 /**

@@ -2,6 +2,7 @@
 // Main product loop orchestrator - saves AI-generated artifacts to workspace
 
 import { decideArtifactPlan, shouldAutoIngest } from './artifact-policy.js';
+import { resolveSkillPack } from './skill-packs/index.js';
 
 /**
  * Create an orchestrator that manages the artifact save flow.
@@ -23,13 +24,16 @@ export function createOrchestrator(runtime) {
      * @returns {Object} Execution result with response, artifact status, and trace
      */
     async execute({ taskText, aiResponse }) {
-      const artifactPlan = decideArtifactPlan({ taskText, suggestedTitle: taskText.slice(0, 20) });
+      // Resolve skill pack before deciding artifact plan
+      const skillPack = await resolveSkillPack(taskText);
+      const artifactPlan = decideArtifactPlan({ taskText, suggestedTitle: taskText.slice(0, 20), skillPack });
       if (!artifactPlan.required) {
         return { ok: true, response: aiResponse, artifact: { saved: false }, trace: [] };
       }
 
-      // Ensure the deliverables directory exists before writing
-      await runtime.runTool('mkdir -p deliverables');
+      // Ensure the output directory exists before writing
+      const outputDir = artifactPlan.relativePath.split('/').slice(0, -1).join('/');
+      await runtime.runTool(`mkdir -p ${outputDir}`);
 
       const writeResult = await runtime.writeArtifact({
         path: artifactPlan.relativePath,
