@@ -26,3 +26,7 @@ dist-ssr
 # Downloaded executables
 downloads*/
 *.exe
+*.zip
+
+# Release packages (built locally, not committed)
+release/

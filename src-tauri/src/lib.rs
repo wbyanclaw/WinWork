@@ -120,6 +120,41 @@ fn get_winwork_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Get combined environment status (winwork, windcli, wiki).
+#[tauri::command]
+fn get_environment_status() -> serde_json::Value {
+    let windcli = crate::wind::check_windcli();
+    let winwork_version = env!("CARGO_PKG_VERSION").to_string();
+    let wiki = crate::wind::check_llm_wiki();
+    serde_json::json!({
+        "winworkVersion": winwork_version,
+        "windcli": windcli,
+        "wiki": wiki
+    })
+}
+
+/// Check wind-cli status (legacy API).
+#[tauri::command]
+fn check_windcli() -> serde_json::Value {
+    let result = crate::wind::check_windcli();
+    serde_json::json!(result)
+}
+
+/// Check wiki status.
+#[tauri::command]
+fn wiki_status() -> crate::wind::WindResult {
+    let wiki = crate::wind::check_llm_wiki();
+    let found = wiki.get("found").map(|v| v == "true").unwrap_or(false);
+    let reason = wiki.get("reason").cloned().unwrap_or_default();
+    crate::wind::WindResult {
+        ok: found,
+        stdout: if found { "wiki available".to_string() } else { String::new() },
+        stderr: reason,
+        exit_code: if found { 0 } else { 1 },
+        data: Some(serde_json::to_value(wiki).unwrap_or_default()),
+    }
+}
+
 /// Save state data with a given key.
 #[tauri::command]
 fn save_state(key: String, data: serde_json::Value) -> Result<(), String> {
@@ -246,6 +281,9 @@ pub fn run() {
             set_workspace_path,
             get_wiki_path,
             get_winwork_version,
+            get_environment_status,
+            check_windcli,
+            wiki_status,
             save_state,
             load_state,
             load_config,
