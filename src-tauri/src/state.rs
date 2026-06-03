@@ -167,6 +167,14 @@ pub fn create_default_readmes() -> Result<(), String> {
         std::fs::write(&readme, "# Workspace\n\nWelcome to your winwork workspace.\n")
             .map_err(|e| format!("Failed to create README: {}", e))?;
     }
+    let system = ws.join("SYSTEM.md");
+    if !system.exists() {
+        std::fs::write(
+            &system,
+            "# SYSTEM\n\n本工作区的产品级一等公民。winwork 会优先呈现并保护此文件。\n\n- 由 winwork 在首次启动时自动创建\n- 用来描述本工作区运行时的产品约定\n- 出现在左栏固定节点，不依赖文件树扫描结果\n",
+        )
+        .map_err(|e| format!("Failed to create SYSTEM.md: {}", e))?;
+    }
     let wiki = winwork_root()?.join("wiki");
     let wiki_readme = wiki.join("README.md");
     if !wiki_readme.exists() {
