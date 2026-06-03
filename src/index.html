@@ -187,14 +187,16 @@
     <span class="font-bold text-[15px] text-ink tracking-tight" data-tauri-drag-region>winwork</span>
   </div>
   <div class="flex-1" data-tauri-drag-region></div>
-  <!-- Connection Status -->
-  <div id="apiStatusBadge" class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium hidden">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
-    <span id="apiStatusText">API 已连接</span>
+  <!-- Top bar status pills (always visible) -->
+  <div class="flex items-center gap-2 mr-3" data-tauri-drag-region>
+    <span id="topReady" class="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-medium" data-tauri-drag-region>
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" data-tauri-drag-region></span>
+      <span data-tauri-drag-region>就绪</span>
+    </span>
+    <span id="topModel" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>…</span>
+    <span id="topWinwork" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>windwork …</span>
+    <span id="topWindcli" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>wind-cli …</span>
   </div>
-  <span id="winworkVersion" class="text-faint text-xs px-2 py-1 bg-slate-50 border border-border rounded-full">v…</span>
-  <span id="initStatus" class="text-xs text-amber-500 hidden">[初始化中]</span>
-  <span id="errorStatus" class="text-xs text-red-500 hidden">⚠ 错误</span>
   <!-- Window Controls (non-draggable) -->
   <div class="flex items-center gap-1 ml-2 -mr-1">
     <button onclick="winMinimize()" id="btn-minimize" class="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 text-muted hover:text-ink transition-colors" title="最小化">
@@ -288,14 +290,18 @@
 
     <!-- Left File Tree -->
     <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
-      <div class="px-4 py-3 border-b border-border">
-        <span class="text-[11px] font-semibold text-muted uppercase tracking-wide">工作区</span>
-      </div>
-      <div class="flex-1 overflow-y-auto py-2" id="fileTree">
-        <div class="px-3 pb-1">
-          <span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span>
-        </div>
+      <div class="flex-1 overflow-y-auto py-2 flex flex-col" id="fileTree">
         <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
+      </div>
+      <!-- Left bottom toolbar: [+] 新对话 -->
+      <div class="border-t border-border p-2 flex items-center gap-2">
+        <button onclick="newFile()" id="btn-new-file" class="w-8 h-8 flex items-center justify-center rounded-lg text-muted hover:bg-slate-100 hover:text-ink transition-colors" title="新建文件">
+          <span class="text-lg leading-none">+</span>
+        </button>
+        <button onclick="newConversation()" id="btn-new-conv" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors">
+          <span class="text-sm">💬</span>
+          新对话
+        </button>
       </div>
     </aside>
 
@@ -497,10 +503,13 @@
         ]);
         container.innerHTML = '';
 
-        // Section: 文件 (workspace)
+        // Section: 工作区 (per @yan's image: 双 section 结构)
         const wsSection = document.createElement('div');
         wsSection.className = 'mb-3';
-        wsSection.innerHTML = '<div class="px-3 pb-1"><span class="text-[10px] font-semibold text-faint uppercase tracking-wide px-2 py-1 block">文件</span></div>';
+        const wsHeader = document.createElement('div');
+        wsHeader.className = 'px-3 py-1.5 flex items-center justify-between';
+        wsHeader.innerHTML = '<span class="text-[10px] font-semibold text-faint uppercase tracking-wide">工作区</span>';
+        wsSection.appendChild(wsHeader);
 
         // Workspace folder header
         const wsFolder = document.createElement('div');
@@ -561,13 +570,23 @@
 
         container.appendChild(wsSection);
 
-        // ── Unified tree: wiki/ as another root-level item (no section header)
-        // Per v10 spec the left panel is a single 文件树 containing
-        // workspace/, wiki/, and SYSTEM.md — NOT separate "工作区" / "知识库" sections.
+        // Divider between 工作区 and 知识库 sections
+        const divider = document.createElement('div');
+        divider.className = 'mx-4 my-2 border-t border-border';
+        container.appendChild(divider);
+
+        // ── 知识库 section (per @yan's image: 双 section 结构)
+        const wikiSection = document.createElement('div');
+        const wikiHeader = document.createElement('div');
+        wikiHeader.className = 'px-3 py-1.5 flex items-center justify-between';
+        wikiHeader.innerHTML = '<span class="text-[10px] font-semibold text-faint uppercase tracking-wide">知识库</span>';
+        wikiSection.appendChild(wikiHeader);
+
+        // Wiki folder header
         const wikiFolder = document.createElement('div');
         wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
         wikiFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📖</span><span>wiki/</span>`;
-        container.appendChild(wikiFolder);
+        wikiSection.appendChild(wikiFolder);
 
         if (wikiResult.ok && wikiResult.data && wikiResult.data.entries && wikiResult.data.entries.length > 0) {
           const wikiEntries = wikiResult.data.entries;
@@ -578,14 +597,16 @@
               <span class="w-4 h-4 flex items-center justify-center text-xs">${entry.is_dir ? '📁' : '📄'}</span>
               <span class="truncate flex-1">${escHtml(entry.name)}</span>
             `;
-            container.appendChild(div);
+            wikiSection.appendChild(div);
           });
         } else {
           const empty = document.createElement('div');
           empty.className = 'px-4 py-1 text-xs text-faint';
           empty.textContent = '(空)';
-          container.appendChild(empty);
+          wikiSection.appendChild(empty);
         }
+
+        container.appendChild(wikiSection);
       } catch(e) {
         container.innerHTML = '<div class="px-4 py-2 text-xs text-amber-600">wind-cli 未安装或不可用</div><div class="px-4 py-1 text-xs text-faint">请先安装 wind-cli 后刷新工作区</div>';
         window._log && window._log('loadFileTree failed:', e);
@@ -601,6 +622,44 @@
           file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
         }
         switchTab('file', document.getElementById('tab-file'));
+      }
+    }
+
+    // ── Left toolbar actions (per @yan's image) ──
+    function newConversation() {
+      const messages = document.getElementById('messages');
+      const welcome = document.getElementById('welcomeScreen');
+      if (messages) {
+        // Keep welcomeScreen; remove any real conversation bubbles
+        Array.from(messages.children).forEach((el) => {
+          if (el.id !== 'welcomeScreen') el.remove();
+        });
+      }
+      if (welcome) welcome.style.display = '';
+      const input = document.getElementById('input');
+      if (input) { input.value = ''; input.focus(); }
+      window._log && window._log('new conversation started');
+    }
+
+    async function newFile() {
+      try {
+        if (window.__TAURI__ && window.__TAURI__.dialog) {
+          const { open, save } = window.__TAURI__.dialog;
+          const path = await save({
+            title: '新建文件',
+            defaultPath: 'untitled.md',
+            filters: [{ name: 'Markdown', extensions: ['md'] }, { name: 'All', extensions: ['*'] }],
+          });
+          if (path) {
+            await invoke('write_file', { path, content: '' });
+            await loadFileTree();
+            window._log && window._log('new file created:', path);
+          }
+        } else {
+          alert('新建文件需要 Tauri 运行时');
+        }
+      } catch (e) {
+        window._log && window._log('newFile failed:', e);
       }
     }
 
@@ -678,6 +737,31 @@
       }
 
       const allReady = envState.windcli && envState.llmwiki;
+
+      // Update top bar 4 status pills (always visible)
+      const topReady = document.getElementById('topReady');
+      const topModel = document.getElementById('topModel');
+      const topWinwork = document.getElementById('topWinwork');
+      const topWindcli = document.getElementById('topWindcli');
+      if (topReady) {
+        if (allReady) {
+          topReady.className = 'flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-medium';
+          topReady.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span><span>就绪</span>';
+        } else {
+          topReady.className = 'flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-medium';
+          topReady.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>未就绪</span>';
+        }
+      }
+      if (topModel) {
+        const m = (typeof apiModel !== 'undefined' && apiModel) ? apiModel : 'MiniMax-M2.7';
+        topModel.textContent = m;
+      }
+      if (topWinwork) {
+        topWinwork.textContent = 'windwork ' + (envState.winworkVersion || 'unknown');
+      }
+      if (topWindcli) {
+        topWindcli.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+      }
 
       // Show env info in status bar using structured display
       const windcliDisplay = envStatus?.windcli?.display || `wind-cli ${envState.windcliVersion}`;
@@ -1131,9 +1215,12 @@
       const div = document.createElement('div');
       div.className = `msg ${role} animate-fade-up flex gap-2.5 max-w-2xl ${role === 'user' ? 'ml-auto' : ''}`;
       if (role === 'user') {
+        // User messages: render as plain text (no markdown)
         div.innerHTML = `<div class="flex-1 flex flex-col items-end gap-1"><span class="text-[10px] text-faint px-1">你</span><div class="bg-brand text-white px-3.5 py-2.5 rounded-2xl rounded-br-md text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div><div class="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-white">👤</span></span></div>`;
       } else {
-        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm">${escHtml(text)}</div></div>`;
+        // Agent messages: render markdown via marked (structured responses per @yan's image)
+        const md = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(text) : escHtml(text);
+        div.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-100 border border-border flex items-center justify-center flex-shrink-0 mt-5"><span class="w-3.5 h-3.5 text-brand">🤖</span></span></div><div class="flex-1 flex flex-col gap-1"><span class="text-[10px] text-faint px-1">winwork</span><div class="bg-white border border-border rounded-2xl rounded-tl-md px-3.5 py-3 text-sm leading-relaxed shadow-sm markdown-body">${md}</div></div>`;
       }
       container.appendChild(div);
     }
