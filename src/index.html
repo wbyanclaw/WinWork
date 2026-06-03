@@ -476,6 +476,7 @@
     function updateApiKeyStatus() {
       const status = document.getElementById('apiKeyStatus');
       const btn = document.getElementById('apiKeyBtn');
+      if (!status || !btn) return;
       if (apiKey) {
         status.textContent = 'AI 已启用';
         btn.classList.add('text-emerald-600');
@@ -956,7 +957,7 @@
       if (placeholder) placeholder.classList.add('hidden');
 
       // Step-by-step execution trace
-      const traceSteps = \`
+      const traceSteps = `
         <div class="space-y-0">
           <div class="flex gap-3 mb-4">
             <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div><div class="flex-1 w-px bg-border mt-1"></div></div>
@@ -978,11 +979,11 @@
             <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-green-100 border-2 border-green-300 text-green-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">5</div></div>
             <div class="flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 5 · AI 格式化回复</div><div class="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate-600 leading-relaxed">\${result.ok ? '执行成功，结果已格式化' : '执行失败，请检查输入'}</div></div>
           </div>
-        </div>\`;
+        </div>`;
       if (trace) trace.innerHTML = traceSteps;
 
       // Data provenance panel
-      const sourceContent = \`
+      const sourceContent = `
         <div class="text-[11px] font-semibold text-muted mb-3 uppercase tracking-wide">原始数据溯源</div>
         <div class="space-y-3">
           <div class="bg-slate-50 border border-border rounded-xl overflow-hidden">
@@ -1003,7 +1004,7 @@
             <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>\${result.ok ? '无路径穿越风险' : '执行异常'}</div>
             <div class="text-[11px] text-emerald-600 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>无外部命令注入</div>
           </div>
-        </div>\`;
+        </div>`;
       if (source) source.innerHTML = sourceContent;
 
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
