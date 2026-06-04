@@ -6,6 +6,8 @@
   <title>winwork</title>
   <!-- Local CSS (no CDN dependency, works offline/China) -->
   <link rel="stylesheet" href="styles.css">
+  <!-- marked.js vendored locally for offline markdown rendering -->
+  <script src="js/lib/marked.min.js"></script>
   <script>
     // ── Enhanced Logging System ────────────────────────────────
     window._logBuffer = [];
@@ -290,6 +292,16 @@
 
     <!-- Left File Tree -->
     <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
+      <div class="px-2 py-1.5 border-b border-border">
+        <input
+          id="fileSearch"
+          type="text"
+          placeholder="搜索文件..."
+          class="w-full px-2 py-1 text-xs bg-slate-50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+          oninput="filterFileTree(this.value)"
+        />
+        <div id="fileSearchCount" class="mt-1 text-[10px] text-faint px-1 hidden"></div>
+      </div>
       <div class="flex-1 overflow-y-auto py-2 flex flex-col" id="fileTree">
         <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
       </div>
@@ -615,12 +627,71 @@
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
     }
 
+    // Spec §3.1 L2.3: minimum-viable file search.
+    // Client-side filter: hide tree items whose name or path segment
+    // doesn't contain the query (case-insensitive). Shows a result
+    // count under the search box; "no matches" hides the tree items
+    // and shows an empty-state message. Pure frontend — no backend
+    // search_files handler is needed for v0.2.29 minimum.
+    let _fileSearchDebounce = null;
+    function filterFileTree(query) {
+      const tree = document.getElementById('fileTree');
+      if (!tree) return;
+      // Debounce 120ms — keeps the UI snappy when typing quickly.
+      clearTimeout(_fileSearchDebounce);
+      _fileSearchDebounce = setTimeout(() => _applyFilter(query), 120);
+    }
+
+    function _applyFilter(query) {
+      const tree = document.getElementById('fileTree');
+      if (!tree) return;
+      const q = (query || '').trim().toLowerCase();
+      const items = tree.querySelectorAll('.tree-item');
+      let visible = 0;
+      items.forEach((el) => {
+        // Folders (workspace/ + wiki/) always stay visible; they're
+        // structural labels, not file entries. We detect by the
+        // presence of an emoji leading span: 📁 / 📖 vs ⚙️ / 📄.
+        const text = (el.textContent || '').toLowerCase();
+        const isFolder = text.includes('workspace/') || text.includes('wiki/');
+        const matches = q === '' || isFolder || text.includes(q);
+        el.style.display = matches ? '' : 'none';
+        if (matches && !isFolder) visible++;
+      });
+      // Update result counter
+      const counter = document.getElementById('fileSearchCount');
+      if (counter) {
+        if (q === '') {
+          counter.classList.add('hidden');
+        } else {
+          counter.classList.remove('hidden');
+          counter.textContent = visible === 0
+            ? '无匹配项'
+            : `${visible} 项匹配`;
+        }
+      }
+    }
+
     async function showFileContent(filename) {
       const result = await invoke('read_file', { path: filename });
       if (result.ok && result.data && result.data.content) {
         const file = document.getElementById('detail-file');
         if (file) {
-          file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+          // Spec §3.1 L2.2: .md / .markdown files render via marked, not <pre>.
+          // Other extensions keep the readable monospace text view.
+          const isMarkdown = /\.(md|markdown)$/i.test(filename);
+          if (isMarkdown && typeof marked !== 'undefined' && marked.parse) {
+            try {
+              const html = marked.parse(result.data.content);
+              file.innerHTML = `<div class="markdown-body bg-white border border-border rounded-xl p-5 text-sm leading-relaxed text-slate-800">${html}</div>`;
+            } catch (e) {
+              // Fallback to safe text rendering if marked throws
+              file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+              window._log && window._log('marked.parse failed for', filename, e);
+            }
+          } else {
+            file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+          }
         }
         switchTab('file', document.getElementById('tab-file'));
       }
