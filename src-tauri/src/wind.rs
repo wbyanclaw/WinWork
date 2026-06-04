@@ -435,7 +435,7 @@ pub fn run_wind(args: &[&str]) -> WindResult {
     build_wind_result(output)
 }
 
-fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> WindResult {
+pub fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -> WindResult {
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).to_string();

@@ -9,6 +9,7 @@ pub mod wind;
 
 use crate::commands::shell::{run_command_impl, run_command_with_stdin_impl, CommandResult};
 use crate::wind::WindResult;
+use std::process::{Command as StdCommand, Stdio};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::open_url as opener_open_url;
@@ -258,6 +259,201 @@ fn load_chat_history() -> Result<Vec<serde_json::Value>, String> {
     }
 }
 
+// ── v0.2.29 must-fix handlers (A group) ────────────────────────────
+// Spec: docs/superpowers/specs/2026-06-04-winwork-v0.2.29-usable-release-design.md
+// Audit: scripts/audit-invoke.sh
+
+/// L0/L1: check if llm-wiki is available. Returns the same HashMap the
+/// legacy `wiki_status` wraps. Frontend calls this directly from
+/// `checkAllEnv()` (index.html:735) and was previously crashing because
+/// the handler was never registered in `generate_handler!`.
+#[tauri::command]
+fn check_llm_wiki() -> std::collections::HashMap<String, String> {
+    crate::wind::check_llm_wiki()
+}
+
+/// L1: open the wind-cli releases page in the default browser.
+/// Frontend wires this to the "⚡ 一键安装 wind-cli" button on the
+/// install modal (index.html:824). Per spec §3.1 L1.2 the install
+/// entry must work on a fresh machine.
+#[tauri::command]
+fn trigger_install() -> WindResult {
+    const URL: &str = "https://github.com/wbyanclaw/wind-cli/releases/latest";
+    match opener_open_url(URL, None::<&str>) {
+        Ok(_) => WindResult {
+            ok: true,
+            stdout: format!("Opened: {}", URL),
+            stderr: String::new(),
+            exit_code: 0,
+            data: Some(serde_json::json!({ "url": URL })),
+        },
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("Failed to open URL: {}", e),
+            exit_code: 1,
+            data: None,
+        },
+    }
+}
+
+/// L2: list files in the configured workspace. Frontend wires this to
+/// the workspace section of the left file tree (index.html:497). Thin
+/// wrapper over `list_files(None)` so callers don't have to know the
+/// workspace root path.
+#[tauri::command]
+fn list_workspace() -> WindResult {
+    crate::wind::list_files(None)
+}
+
+/// L2: list files in the configured wiki directory. Frontend wires
+/// this to the wiki section of the left file tree (index.html:502).
+#[tauri::command]
+fn list_wiki() -> WindResult {
+    let path = crate::wind::get_wiki_path();
+    crate::wind::list_files(Some(path))
+}
+
+/// L2: write a file at a workspace-relative path. Frontend wires this
+/// to the "new file" button (index.html:655). The `path` is relative
+/// to the workspace root, matching `read_file` semantics.
+#[tauri::command]
+fn write_file(path: String, content: String) -> WindResult {
+    use std::io::Write;
+
+    let workspace = crate::wind::get_workspace_path();
+    let ws = workspace.trim_end_matches('\\').trim_end_matches('/');
+
+    let windcli = crate::wind::get_windcli_path();
+    let mut cmd = StdCommand::new(&windcli);
+    cmd.args([
+        "--json",
+        "--workspace",
+        ws,
+        "write",
+        &path,
+        "--stdin",
+    ]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return WindResult {
+                ok: false,
+                stdout: String::new(),
+                stderr: format!("Failed to spawn wind-cli: {}", e),
+                exit_code: 1,
+                data: None,
+            }
+        }
+    };
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(content.as_bytes());
+    } else {
+        let _ = child.kill();
+        return WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "Failed to open stdin pipe to wind-cli".to_string(),
+            exit_code: 1,
+            data: None,
+        };
+    }
+
+    match child.wait_with_output() {
+        Ok(o) => crate::wind::build_wind_result(Ok(o)),
+        Err(e) => WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: format!("Failed waiting for wind-cli: {}", e),
+            exit_code: 1,
+            data: None,
+        },
+    }
+}
+
+/// L2: write a workspace artifact at a relative path. The runtime
+/// orchestrator (src/runtime/tauri-adapter.js:16) and the frontend
+/// save UI (index.html:99) both call this. Equivalent to `write_file`
+/// today; kept as a separate handler so callers can evolve the
+/// artifact-saving semantics (e.g. add a header, run an ingest hook)
+/// without touching the primitive.
+#[tauri::command]
+fn write_workspace_artifact(relative_path: String, content: String) -> WindResult {
+    write_file(relative_path, content)
+}
+
+/// L2: send a message to an OpenAI-compatible LLM API. Returns the
+/// model's text response plus empty command lists (tool execution is
+/// handled by the orchestrator on the JS side, not here). v0.2.29
+/// minimum: just deliver the chat text; we do not implement tool
+/// calling in Rust.
+#[tauri::command]
+async fn ai_chat(
+    message: String,
+    api_key: String,
+    base_url: String,
+    model: String,
+) -> Result<serde_json::Value, String> {
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{ "role": "user", "content": message }],
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("http client build: {}", e))?;
+
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("http send: {}", e))?;
+
+    let status = resp.status();
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("http read: {}", e))?;
+
+    if !status.is_success() {
+        return Err(format!("LLM API HTTP {}: {}", status, text));
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("LLM JSON parse: {}", e))?;
+
+    let response_text = parsed
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(serde_json::json!({
+        "response": response_text,
+        "commands_executed": [],
+        "command_results": [],
+        "model": model,
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Ensure default config exists before starting the app
@@ -297,6 +493,14 @@ pub fn run() {
             save_chat_history,
             load_chat_history,
             init_default_files,
+            // v0.2.29 must-fix (A group) — see spec §3.1
+            check_llm_wiki,
+            trigger_install,
+            list_workspace,
+            list_wiki,
+            write_file,
+            write_workspace_artifact,
+            ai_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
