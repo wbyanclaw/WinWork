@@ -195,9 +195,12 @@
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" data-tauri-drag-region></span>
       <span data-tauri-drag-region>就绪</span>
     </span>
-    <span id="topModel" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>…</span>
+    <span id="topModel" onclick="showApiKeyModal()" title="点击配置模型 / API Key" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-100" data-tauri-drag-region>…</span>
     <span id="topWinwork" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>windwork …</span>
-    <span id="topWindcli" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>wind-cli …</span>
+    <span id="topWindcli" onclick="handleWindcliPillClick()" title="点击检查/升级 wind-cli" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-100 inline-flex items-center gap-1.5" data-tauri-drag-region>
+      <span id="topWindcliText" data-tauri-drag-region>wind-cli …</span>
+      <span id="topWindcliBadge" class="hidden w-1.5 h-1.5 rounded-full bg-red-500" data-tauri-drag-region></span>
+    </span>
   </div>
   <!-- Window Controls (non-draggable) -->
   <div class="flex items-center gap-1 ml-2 -mr-1">
@@ -278,6 +281,34 @@
   </div>
 </div>
 
+<!-- Wind-cli Upgrade Modal (v0.2.29.1 hotfix — 顶栏 wind-cli 升级入口) -->
+<div id="upgradeModal" class="hidden fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-ink">wind-cli 升级</h3>
+      <button onclick="hideUpgradeModal()" class="text-slate-400 hover:text-slate-600">
+        <span class="w-5 h-5">✕</span></span>
+      </button>
+    </div>
+    <p class="text-sm text-muted mb-4">检查 wind-cli 是否为最新版本；如有新版可在此一键升级。</p>
+    <div class="space-y-2 text-sm">
+      <div class="flex justify-between bg-slate-50 border border-border rounded-lg px-3 py-2">
+        <span class="text-muted">当前版本</span>
+        <span id="upgradeCurrentVersion" class="font-mono text-ink">…</span>
+      </div>
+      <div class="flex justify-between bg-slate-50 border border-border rounded-lg px-3 py-2">
+        <span class="text-muted">最新版本</span>
+        <span id="upgradeLatestVersion" class="font-mono text-ink">…</span>
+      </div>
+      <div id="upgradeStatus" class="text-xs text-faint mt-2">点击"检查更新"开始</div>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <button onclick="runCheckUpgrade()" id="upgradeCheckBtn" class="flex-1 px-4 py-2 border border-border rounded-xl text-sm text-muted hover:bg-slate-50">检查更新</button>
+      <button onclick="runDoUpgrade()" id="upgradeDoBtn" class="flex-1 px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled>升级</button>
+    </div>
+  </div>
+</div>
+
 <!-- Debug Log Panel -->
 <div id="debugLog" class="hidden">
   <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-700">
@@ -292,6 +323,14 @@
 
     <!-- Left File Tree -->
     <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
+      <!-- v0.2.29.1 hotfix: workspace header (current path + 切换按钮) -->
+      <div class="px-2 py-1.5 border-b border-border bg-slate-50">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-[10px] text-faint uppercase tracking-wide">工作区</span>
+          <button onclick="pickWorkspaceFolder()" id="btn-switch-ws" class="text-[10px] text-brand hover:text-blue-700 hover:underline" title="切换工作区目录">📁 切换</button>
+        </div>
+        <div id="workspacePathDisplay" class="mt-0.5 text-[11px] text-ink font-mono truncate" title="">…</div>
+      </div>
       <div class="px-2 py-1.5 border-b border-border">
         <input
           id="fileSearch"
@@ -486,15 +525,34 @@
     }
 
     function updateApiKeyStatus() {
+      // v0.2.29.1 hotfix: apiKeyBtn / apiKeyStatus ids are not declared in the
+      // DOM (the original author left a stale JS reference). The only real
+      // entry the user sees is the topModel pill — drive its color from
+      // apiKey state so the user can tell at a glance whether AI is enabled.
       const status = document.getElementById('apiKeyStatus');
       const btn = document.getElementById('apiKeyBtn');
-      if (!status || !btn) return;
-      if (apiKey) {
-        status.textContent = 'AI 已启用';
-        btn.classList.add('text-emerald-600');
-      } else {
-        status.textContent = '设置API';
-        btn.classList.remove('text-emerald-600');
+      if (status || btn) {
+        if (!status || !btn) return;
+        if (apiKey) {
+          status.textContent = 'AI 已启用';
+          btn.classList.add('text-emerald-600');
+        } else {
+          status.textContent = '设置API';
+          btn.classList.remove('text-emerald-600');
+        }
+      }
+      // Mirror the state onto topModel so the user sees AI status.
+      const topModel = document.getElementById('topModel');
+      if (topModel) {
+        const m = (typeof apiModel !== 'undefined' && apiModel) ? apiModel : 'MiniMax-M2.7';
+        topModel.textContent = apiKey ? `✓ ${m}` : m;
+        if (apiKey) {
+          topModel.classList.add('text-emerald-700', 'border-emerald-200');
+          topModel.classList.remove('text-muted');
+        } else {
+          topModel.classList.remove('text-emerald-700', 'border-emerald-200');
+          topModel.classList.add('text-muted');
+        }
       }
     }
 
@@ -735,6 +793,63 @@
       }
     }
 
+    // ── Workspace switcher (v0.2.29.1 hotfix) ────────────────
+    // The user can re-point the workspace at any local folder. We delegate
+    // to the existing Tauri `select_folder` command (uses native dialog),
+    // persist via set_workspace_path, then refresh the file tree.
+    let _lastDisplayedWorkspacePath = '';
+    async function refreshWorkspacePathDisplay() {
+      try {
+        const p = await invoke('get_workspace_path', {}, 5000);
+        if (typeof p === 'string' && p) {
+          _lastDisplayedWorkspacePath = p;
+          const el = document.getElementById('workspacePathDisplay');
+          if (el) {
+            el.textContent = p;
+            el.title = p;
+          }
+        }
+      } catch (e) {
+        window._log && window._log('refreshWorkspacePathDisplay failed:', e);
+      }
+    }
+
+    async function pickWorkspaceFolder() {
+      const btn = document.getElementById('btn-switch-ws');
+      if (btn) btn.disabled = true;
+      try {
+        // Prefer the Tauri command (native dialog). Fall back to JS dialog.
+        let folder = '';
+        const r = await invoke('select_folder', {}, 60000);
+        if (r && r.ok && r.stdout) {
+          folder = r.stdout;
+        } else {
+          // Fallback: window.__TAURI__.dialog.open with directory: true
+          if (window.__TAURI__ && window.__TAURI__.dialog) {
+            const { open } = window.__TAURI__.dialog;
+            const picked = await open({ directory: true, multiple: false, title: '选择工作区目录' });
+            if (picked) folder = typeof picked === 'string' ? picked : (picked.path || '');
+          }
+        }
+        if (!folder) {
+          window._log && window._log('pickWorkspaceFolder: user cancelled');
+          return;
+        }
+        const setRes = await invoke('set_workspace_path', { path: folder }, 5000);
+        if (setRes && setRes.ok === false) {
+          window._log && window._log('set_workspace_path failed:', setRes.stderr);
+          return;
+        }
+        await refreshWorkspacePathDisplay();
+        await loadFileTree();
+        window._log && window._log('workspace switched to:', folder);
+      } catch (e) {
+        window._log && window._log('pickWorkspaceFolder failed:', e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     // ── Window Controls ───────────────────────────────────────
     async function winMinimize() {
       try {
@@ -832,7 +947,12 @@
         topWinwork.textContent = 'windwork ' + (envState.winworkVersion || 'unknown');
       }
       if (topWindcli) {
-        topWindcli.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+        const topWindcliText = document.getElementById('topWindcliText');
+        if (topWindcliText) {
+          topWindcliText.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+        } else {
+          topWindcli.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+        }
       }
 
       // Show env info in status bar using structured display
@@ -943,6 +1063,113 @@
       document.getElementById('installModal').classList.add('hidden');
     }
 
+    // ── Wind-cli upgrade entry (v0.2.29.1 hotfix) ────────────
+    // Pill click -> open upgrade modal. Auto-check on startup (after 2s)
+    // surfaces a red dot badge if a newer wind-cli is available.
+    let _upgradeInFlight = false;
+    let _upgradeCheckResult = null; // { current, latest, available }
+
+    async function handleWindcliPillClick() {
+      const modal = document.getElementById('upgradeModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      // Pre-fill current version from envState (already loaded)
+      const cur = document.getElementById('upgradeCurrentVersion');
+      if (cur) cur.textContent = envState.windcliVersion || 'unknown';
+      const latest = document.getElementById('upgradeLatestVersion');
+      if (latest) latest.textContent = '—';
+      const status = document.getElementById('upgradeStatus');
+      if (status) status.textContent = '点击"检查更新"获取最新版本';
+      const doBtn = document.getElementById('upgradeDoBtn');
+      if (doBtn) doBtn.disabled = true;
+      // Auto-run check on open so the user gets the latest info immediately
+      runCheckUpgrade();
+    }
+
+    function hideUpgradeModal() {
+      const modal = document.getElementById('upgradeModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function runCheckUpgrade() {
+      if (_upgradeInFlight) return;
+      _upgradeInFlight = true;
+      const status = document.getElementById('upgradeStatus');
+      const latest = document.getElementById('upgradeLatestVersion');
+      const doBtn = document.getElementById('upgradeDoBtn');
+      if (status) status.textContent = '正在检查…';
+      if (doBtn) doBtn.disabled = true;
+      try {
+        const result = await invoke('check_upgrade', {}, 15000);
+        if (!result || !result.ok) {
+          if (status) status.textContent = '检查失败：' + (result?.stderr || '未知错误');
+          _upgradeInFlight = false;
+          return;
+        }
+        // result.data is the JSON from crate::wind::check_upgrade()
+        // Expected fields: { current, latest, available, ... }
+        const data = (typeof result.data === 'object' && result.data) ? result.data : {};
+        const current = data.current || envState.windcliVersion || 'unknown';
+        const latestVer = data.latest || data.output || current;
+        const available = data.available === true || (latestVer && current && latestVer !== current);
+        if (latest) latest.textContent = latestVer || '—';
+        if (status) {
+          status.textContent = available
+            ? '⚠️ 发现新版本，建议升级'
+            : (current === latestVer ? '✓ 已是最新版本' : '检查完成');
+        }
+        if (doBtn) doBtn.disabled = !available;
+        _upgradeCheckResult = { current, latest: latestVer, available };
+        // Update red dot badge
+        const badge = document.getElementById('topWindcliBadge');
+        if (badge) badge.classList.toggle('hidden', !available);
+      } catch (e) {
+        if (status) status.textContent = '检查失败：' + String(e);
+      }
+      _upgradeInFlight = false;
+    }
+
+    async function runDoUpgrade() {
+      const doBtn = document.getElementById('upgradeDoBtn');
+      const status = document.getElementById('upgradeStatus');
+      if (doBtn) {
+        doBtn.disabled = true;
+        doBtn.textContent = '升级中…';
+      }
+      if (status) status.textContent = '正在升级 wind-cli，完成后会自动关闭…';
+      try {
+        const r = await invoke('do_upgrade', {}, 10000);
+        // do_upgrade is fire-and-forget on backend; the modal stays open
+        // and the user will see status via the upgrade-complete event
+        // (not surfaced here — keep it simple for v0.2.29.1).
+        window._log && window._log('do_upgrade invoked:', JSON.stringify(r));
+        if (status) status.textContent = '升级已启动，请到终端/浏览器查看进度。完成后请重启 winwork。';
+      } catch (e) {
+        if (status) status.textContent = '升级失败：' + String(e);
+        if (doBtn) {
+          doBtn.disabled = false;
+          doBtn.textContent = '升级';
+        }
+      }
+    }
+
+    async function autoCheckWindcliUpgrade() {
+      try {
+        const result = await invoke('check_upgrade', {}, 15000);
+        if (!result || !result.ok) return;
+        const data = (typeof result.data === 'object' && result.data) ? result.data : {};
+        const current = data.current || envState.windcliVersion || 'unknown';
+        const latestVer = data.latest || data.output || current;
+        const available = data.available === true || (latestVer && current && latestVer !== current);
+        const badge = document.getElementById('topWindcliBadge');
+        if (badge) badge.classList.toggle('hidden', !available);
+        _upgradeCheckResult = { current, latest: latestVer, available };
+        window._log && window._log('autoCheckWindcliUpgrade:', current, '->', latestVer, 'available=', available);
+      } catch (e) {
+        window._log && window._log('autoCheckWindcliUpgrade failed:', e);
+      }
+    }
+
     // ESC to close modal
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -1000,10 +1227,30 @@
     }
 
     // ── Helpers ─────────────────────────────────────────────
+    // v0.2.29.1 hotfix: keep the latest CLI call summary in module scope so
+    // the detail-trace tab can render a persistent header (cmd / exit / ms).
+    let _lastCliCall = null; // { cmd, exitCode, durationMs, ok, at }
+
+    function _recordLastCliCall(cmd, result) {
+      // WindResult fields: ok, stdout, stderr, exit_code, data
+      // result may or may not carry a duration — derive a sensible default.
+      const exitCode = (result && typeof result.exit_code === 'number')
+        ? result.exit_code
+        : (result && result.ok ? 0 : 1);
+      _lastCliCall = {
+        cmd: cmd || '(unknown)',
+        exitCode,
+        ok: !!(result && result.ok),
+        durationMs: (result && typeof result.duration_ms === 'number') ? result.duration_ms : null,
+        at: Date.now(),
+      };
+    }
+
     function displayWindResult(aid, text, result, cmdName) {
       const bubble = document.getElementById(aid + '-bubble');
       if (!bubble) return;
       const cmd = cmdName;
+      _recordLastCliCall(cmd, result);
       bubble.innerHTML = `
         <p class="mb-2">${escHtml(text)}</p>
         <div class="mt-2 rounded-lg border border-border overflow-hidden">
@@ -1027,9 +1274,24 @@
       const placeholder = document.getElementById('detail-placeholder');
       if (placeholder) placeholder.classList.add('hidden');
 
+      // v0.2.29.1 hotfix: detail-trace header — summarize the most recent
+      // CLI call (命令 / 退出码 / 耗时). This stays visible at the top of the
+      // trace tab so users see "what just ran" without scrolling.
+      const cliHeaderHtml = `
+        <div class="mb-3 px-3 py-2 bg-slate-50 border border-border rounded-lg flex items-center gap-2 text-[11px] font-mono">
+          <span class="w-3 h-3 text-brand">⚡</span>
+          <span class="text-muted">本次 CLI:</span>
+          <span class="text-ink font-semibold">\${escHtml(cmd)}</span>
+          <span class="text-muted">退出码</span>
+          <span class="\${result.ok ? 'text-emerald-600' : 'text-red-500'} font-semibold">\${result.ok ? 0 : (result.exit_code ?? 1)}</span>
+          <span class="text-muted">耗时</span>
+          <span class="text-ink">\${(result && typeof result.duration_ms === 'number') ? result.duration_ms + ' ms' : '—'}</span>
+        </div>`;
+
       // Step-by-step execution trace
       const traceSteps = `
         <div class="space-y-0">
+          \${cliHeaderHtml}
           <div class="flex gap-3 mb-4">
             <div class="flex flex-col items-center"><div class="w-6 h-6 rounded-full bg-blue-100 border-2 border-blue-300 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</div><div class="flex-1 w-px bg-border mt-1"></div></div>
             <div class="pb-3 flex-1"><div class="text-[11px] text-faint mb-0.5">步骤 1 · 用户输入</div><div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-[12px] text-slate-700 leading-relaxed">"\${escHtml(text)}"</div></div>
@@ -1139,8 +1401,19 @@
     }
 
     // ── Command router ───────────────────────────────────────
+    // v0.2.29.1 hotfix: "answer" route for read-only keywords — no wind-cli call.
+    // Spec §3.1 L2.5: 简单 Q&A 不调 CLI. If the user only asked a read-only
+    // question and has no apiKey, render a polite "please configure API" card
+    // instead of routing to wind ls.
+    const ROUTE_READ_ONLY = /(列举|列出|读取|读|搜索|查找|查看|看|翻译|解释|说明|什么是|是什么|介绍|简介|总结|概括|对比|区别|怎么用|如何|list|ls|read|search|find|show|view|translate|explain|what is|how to|summary|summarize|compare)/i;
     function routeCommand(text) {
       const t = text.toLowerCase();
+      // Read-only: if the message is just a question / lookup with no obvious
+      // write/mkdir/open intent, return "answer" and let send() handle it.
+      const hasWriteIntent = /(创建|写|put|新建|删除|删除|rm|delete|update|更新|write|mkdir|wft|打开|open|搜索.*并.*保存|保存到|入|入.*库|wiki|知识库)/i.test(text);
+      if (!hasWriteIntent && ROUTE_READ_ONLY.test(text)) {
+        return 'answer';
+      }
       if (t.includes('列出') || t.includes('list') || t.includes('ls') || t.includes('文件')) return 'ls';
       if (t.includes('创建') || t.includes('mkdir') || t.includes('目录') || t.includes('新建')) return 'mkdir';
       if (t.includes('写') || t.includes('put') || t.includes('创建文件')) return 'write';
@@ -1244,6 +1517,26 @@
         } else {
           // Use keyword routing mode
           const key = routeCommand(text);
+
+          // v0.2.29.1 hotfix: read-only "answer" route — no wind-cli call.
+          // If the user only asked a read-only question and has no apiKey,
+          // prompt them to configure an API key rather than firing `wind ls`.
+          if (key === 'answer') {
+            const bubble = document.getElementById(aid + '-bubble');
+            if (bubble) {
+              bubble.innerHTML = `
+                <div class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-sm">
+                  <div class="flex items-center gap-1.5 text-blue-700 font-medium">
+                    <span>💡</span><span>这是只读类问题，不需要 wind-cli</span>
+                  </div>
+                  <div class="mt-1 text-xs text-blue-600">
+                    请先在顶栏点击模型名 (<span class="font-mono">${escHtml((typeof apiModel !== 'undefined' && apiModel) ? apiModel : 'MiniMax-M2.7')}</span>) 配置 API Key，
+                    配置后我会直接用文本回答你的问题，不会触发任何 wind-cli 调用或落盘。
+                  </div>
+                </div>`;
+            }
+            result = { ok: false, stdout: '', stderr: 'read-only; awaiting apiKey', deferred: true };
+          } else
 
           // C group (defer to v0.3.0): wiki_* — never reach an unhandled
           // invoke('wiki_*'); render a structured "v0.3.0 即将到来" card
@@ -1552,6 +1845,17 @@
       updateStatusBar('loading', '正在启动...');
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
 
+      // v0.2.29.1 hotfix: detail-trace tab default — show "尚无 CLI 调用"
+      // before the user has run any command.
+      const _traceEl = document.getElementById('detail-trace');
+      if (_traceEl && (_traceEl.innerHTML.trim() === '' || _traceEl.children.length === 0)) {
+        _traceEl.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full text-center gap-2 text-faint py-12">
+            <span class="w-6 h-6">⚡</span>
+            <p class="text-sm">尚无 CLI 调用</p>
+            <p class="text-[11px]">运行 wind-cli 命令后，此处会显示本次调用的命令 / 退出码 / 耗时</p>
+          </div>`;
+      }
       // Run env check with timeout - don't block entire init
       try {
         updateStatusBar('loading', '检查环境...');
@@ -1603,6 +1907,13 @@
 
       // Always enter main UI — modal visibility is already controlled by checkAllEnv()
       enterMainUI();
+
+      // v0.2.29.1 hotfix: auto-check wind-cli upgrade 2s after init so the
+      // red-dot badge has time to surface without blocking first paint.
+      setTimeout(autoCheckWindcliUpgrade, 2000);
+
+      // v0.2.29.1 hotfix: show current workspace path in left header
+      try { await refreshWorkspacePathDisplay(); } catch (e) {}
 
       updateStatusBar('ready', '就绪');
       window._log('INIT: complete');

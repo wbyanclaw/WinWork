@@ -1,6 +1,6 @@
 # audit-invoke.sh baseline
-# Date: 2026-06-04T14:47:30+08:00
-# Commit: 2ae705b008be9abaa075d77aadf9ee8df05a4218
+# Date: 2026-06-04T16:07:41+08:00
+# Commit: 16b15cf2546269c4d9ba7c5bc44b4a270bd00c56
 # Frontend invokes: 32
 # Backend handlers: 34
 # Missing (frontend calls without backend handler): 4
