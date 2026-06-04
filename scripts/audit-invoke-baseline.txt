@@ -1,17 +1,12 @@
 # audit-invoke.sh baseline
-# Date: 2026-06-04T14:42:47+08:00
-# Commit: ca9a514430aadabfc3615654a885750e121005c4
-# Frontend invokes: 37
+# Date: 2026-06-04T14:47:30+08:00
+# Commit: 2ae705b008be9abaa075d77aadf9ee8df05a4218
+# Frontend invokes: 32
 # Backend handlers: 34
-# Missing (frontend calls without backend handler): 9
+# Missing (frontend calls without backend handler): 4
 
 ## MISSING HANDLERS (must be 0 for release)
-ingest_to_wiki
 init_demo_workspace
 mkdir_dir
-run_windcli
 run_wind_command
 wft_open
-wiki_ingest
-wiki_lint
-wiki_query

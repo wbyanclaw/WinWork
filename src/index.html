@@ -880,8 +880,11 @@
     });
 
     // ── Wiki ─────────────────────────────────────────────────
+    // v0.2.29: wiki_ingest / wiki_lint are deferred to v0.3.0 (C group).
+    // These entry points stay visible (so users see the section is
+    // recognized) but never reach a missing backend. UI shows an
+    // explicit amber card pointing at v0.3.0.
     async function doWikiIngest() {
-      // Use stored wiki path if set, otherwise prompt
       const storedPath = appState.wikiPath;
       const path = storedPath || prompt('请输入要入库的文件路径：');
       if (!path) return;
@@ -889,17 +892,18 @@
       const aid = 'w' + Date.now();
       appendAgentThinking(aid, document.getElementById('messages'));
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      try {
-        const result = await invoke('wiki_ingest', { path });
-        const bubble = document.getElementById(aid + '-bubble');
-        if (bubble) {
-          bubble.innerHTML = result.ok
-            ? `<p class="mb-2">文档入库成功 ✅</p><div class="text-xs text-muted">${escHtml(result.stdout || '完成')}</div>`
-            : `<p class="mb-2">入库失败 ❌</p><div class="text-xs text-red-500">${escHtml(result.stderr || result.stdout)}</div>`;
-        }
-      } catch(e) {
-        const bubble = document.getElementById(aid + '-bubble');
-        if (bubble) bubble.innerHTML = `<p>⚠️ 错误: ${escHtml(String(e))}</p>`;
+      const bubble = document.getElementById(aid + '-bubble');
+      if (bubble) {
+        bubble.innerHTML = `
+          <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
+            <div class="flex items-center gap-1.5 text-amber-700 font-medium">
+              <span>📚</span><span>wiki ingest 在 v0.2.29 未提供</span>
+            </div>
+            <div class="mt-1 text-xs text-amber-600">
+              知识库完整闭环（wiki build / ingest / query / precompile）属于 v0.3.0 路线。
+              本版本仅承诺工作区基本交互。
+            </div>
+          </div>`;
       }
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
@@ -909,21 +913,17 @@
       const aid = 'w' + Date.now();
       appendAgentThinking(aid, document.getElementById('messages'));
       try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      try {
-        const result = await invoke('wiki_lint');
-        const bubble = document.getElementById(aid + '-bubble');
-        if (bubble) {
-          bubble.innerHTML = result.ok
-            ? `<p class="mb-2">知识库健康检查完成</p><div class="font-mono text-xs text-muted whitespace-pre-wrap max-h-64 overflow-y-auto">${escHtml(result.stdout || '无问题')}</div>`
-            : `<p class="mb-2">检查失败 ❌</p><div class="text-xs text-red-500">${escHtml(result.stderr || result.stdout)}</div>`;
-          // Show in detail panel
-          const trace = document.getElementById('detail-trace');
-          if (trace) trace.innerHTML = `<div class="font-mono text-xs text-slate-700 whitespace-pre-wrap">${escHtml(result.stdout || result.stderr || '无输出')}</div>`;
-          document.getElementById('detail-placeholder')?.classList.add('hidden');
-        }
-      } catch(e) {
-        const bubble = document.getElementById(aid + '-bubble');
-        if (bubble) bubble.innerHTML = `<p>⚠️ 错误: ${escHtml(String(e))}</p>`;
+      const bubble = document.getElementById(aid + '-bubble');
+      if (bubble) {
+        bubble.innerHTML = `
+          <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
+            <div class="flex items-center gap-1.5 text-amber-700 font-medium">
+              <span>📚</span><span>wiki lint 在 v0.2.29 未提供</span>
+            </div>
+            <div class="mt-1 text-xs text-amber-600">
+              知识库健康检查属于 v0.3.0 路线，本版本不提供。
+            </div>
+          </div>`;
       }
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
@@ -1174,32 +1174,57 @@
           // Use keyword routing mode
           const key = routeCommand(text);
 
-          // Dedicated commands use their own Tauri invocations
-          if (key === 'wiki_query') {
-            const question = text.replace(/知识库查询|wiki query|查知识/gi, '').trim() || '介绍你自己';
-            result = await invoke('wiki_query', { question });
-            displayWindResult(aid, text, result, 'wiki query');
-          } else if (key === 'wiki_ingest') {
-            const m = text.match(/(?:知识库入库|wiki ingest|文档入库)[:：]?\s*(\S+)/i);
-            const path = m ? m[1] : prompt('请输入要入库的文件路径：');
-            if (!path) { document.getElementById(aid + '-bubble').innerHTML = '<p>已取消</p>'; return; }
-            result = await invoke('wiki_ingest', { path });
-            displayWindResult(aid, text, result, 'wiki ingest');
+          // C group (defer to v0.3.0): wiki_* — never reach an unhandled
+          // invoke('wiki_*'); render a structured "v0.3.0 即将到来" card
+          // so the user can see the route is recognized, not a crash.
+          if (key === 'wiki_query' || key === 'wiki_ingest' || key === 'wiki_lint') {
+            const wikiOp = key.replace('wiki_', ''); // query / ingest / lint
+            const bubble = document.getElementById(aid + '-bubble');
+            if (bubble) {
+              bubble.innerHTML = `
+                <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
+                  <div class="flex items-center gap-1.5 text-amber-700 font-medium">
+                    <span>📚</span><span>知识库 ${wikiOp} 在 v0.2.29 未提供</span>
+                  </div>
+                  <div class="mt-1 text-xs text-amber-600">
+                    知识库完整闭环（wiki build / ingest / query / precompile）属于 v0.3.0 路线。
+                    本版本仅承诺工作区基本交互。如需立即试用，请直接用 wind-cli 调用 wiki 子命令。
+                  </div>
+                </div>`;
+            }
+            result = { ok: false, stdout: '', stderr: 'v0.2.29 不提供 wiki_' + wikiOp, deferred_to: 'v0.3.0' };
           } else if (key === 'mkdir') {
-            // Extract path with simple token grab (no fragile regex split)
+            // B group degrade: catch + show "暂未提供" card, don't crash.
             const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
             const path = tokens[tokens.length - 1] || 'newdir';
-            result = await invoke('mkdir_dir', { path });
-            displayWindResult(aid, text, result, 'mkdir');
+            try {
+              result = await invoke('mkdir_dir', { path });
+              displayWindResult(aid, text, result, 'mkdir');
+            } catch (e) {
+              result = { ok: false, stdout: '', stderr: 'mkdir 暂未在 v0.2.29 提供', deferred: true };
+              displayWindResult(aid, text, result, 'mkdir');
+            }
           } else if (key === 'wft') {
+            // B group degrade
             const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
             const file = tokens[tokens.length - 1] || 'test.txt';
-            result = await invoke('wft_open', { file });
-            displayWindResult(aid, text, result, 'wft');
+            try {
+              result = await invoke('wft_open', { file });
+              displayWindResult(aid, text, result, 'wft');
+            } catch (e) {
+              result = { ok: false, stdout: '', stderr: 'wft 暂未在 v0.2.29 提供', deferred: true };
+              displayWindResult(aid, text, result, 'wft');
+            }
           } else {
+            // B group degrade: run_wind_command
             const args = buildArgs(key, text);
-            result = await invoke('run_wind_command', { args });
-            displayWindResult(aid, text, result, args[0]);
+            try {
+              result = await invoke('run_wind_command', { args });
+              displayWindResult(aid, text, result, args[0]);
+            } catch (e) {
+              result = { ok: false, stdout: '', stderr: 'run_wind_command 暂未在 v0.2.29 提供', deferred: true };
+              displayWindResult(aid, text, result, args[0]);
+            }
           }
         }
 
@@ -1514,6 +1539,8 @@
 
     // ── Workspace Initialization ─────────────────────────────
     async function initWorkspace() {
+      // B group degrade (v0.2.29): init_demo_workspace has no backend.
+      // Treat absence as "not implemented, continue with default state".
       try {
         const result = await invoke('init_demo_workspace');
         if (result && !result.ok) {
@@ -1522,7 +1549,8 @@
           window._log && window._log('initWorkspace: workspace 初始化成功');
         }
       } catch(e) {
-        window._log && window._log('initWorkspace: 异常', e);
+        // v0.2.29: handler not registered; this is expected, not a crash.
+        window._log && window._log('initWorkspace: 跳过 (v0.2.29 不提供 init_demo_workspace)');
       }
     }
 
