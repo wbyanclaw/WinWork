@@ -1,0 +1,24 @@
+# audit-invoke.sh baseline
+# Date: 2026-06-04T14:30:04+08:00
+# Commit: 7a67e18894f9ee31dc862a274c1c7ebdf7da8d8b
+# Frontend invokes: 37
+# Backend handlers: 27
+# Missing (frontend calls without backend handler): 16
+
+## MISSING HANDLERS (must be 0 for release)
+ai_chat
+check_llm_wiki
+ingest_to_wiki
+init_demo_workspace
+list_wiki
+list_workspace
+mkdir_dir
+run_windcli
+run_wind_command
+trigger_install
+wft_open
+wiki_ingest
+wiki_lint
+wiki_query
+write_file
+write_workspace_artifact
