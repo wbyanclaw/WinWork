@@ -156,6 +156,54 @@ fn wiki_status() -> crate::wind::WindResult {
     }
 }
 
+// ── v1.0 wiki 4 command surface (M5.2) ──────────────────────────────
+// Indirect path: winwork → wind-cli `wiki <ingest|query|lint>` → llm-wiki-lib.
+// Each wraps `run_wind(&["--json", ...])` so workspace + JSON parsing is
+// automatic; `data: Option<serde_json::Value>` lands in the frontend trace
+// via the existing `_recordLastCliCall` hook.
+
+/// M5.2: ingest a source file into the wiki.
+/// Path may be absolute or workspace-relative; wind-cli resolves via
+/// the auto-injected --workspace. Frontend wires to the "📥 入库" button.
+#[tauri::command]
+fn wiki_ingest(path: String) -> crate::wind::WindResult {
+    if path.trim().is_empty() {
+        return crate::wind::WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "wiki_ingest: path is empty".to_string(),
+            exit_code: 1,
+            data: None,
+        };
+    }
+    crate::wind::run_wind(&["--json", "wiki", "ingest", &path])
+}
+
+/// M5.2: ask a question against the wiki. Returns QueryResult JSON
+/// (ok, question, answer, sources[], no_wiki_content). Frontend wires
+/// to the wiki panel query input.
+#[tauri::command]
+fn wiki_query(question: String) -> crate::wind::WindResult {
+    if question.trim().is_empty() {
+        return crate::wind::WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "wiki_query: question is empty".to_string(),
+            exit_code: 1,
+            data: None,
+        };
+    }
+    crate::wind::run_wind(&["--json", "wiki", "query", &question])
+}
+
+/// M5.2: lint the wiki (dead links / duplicates / empty files). Returns
+/// LintResult JSON (ok, file_count, issues[], summary). Frontend wires
+/// to the "🔍 Lint" button on the wiki panel header.
+#[tauri::command]
+fn wiki_lint() -> crate::wind::WindResult {
+    crate::wind::run_wind(&["--json", "wiki", "lint"])
+}
+
 /// Save state data with a given key.
 #[tauri::command]
 fn save_state(key: String, data: serde_json::Value) -> Result<(), String> {
@@ -512,6 +560,10 @@ pub fn run() {
             write_file,
             write_workspace_artifact,
             ai_chat,
+            // v1.0 wiki 4 command surface (M5.2)
+            wiki_ingest,
+            wiki_query,
+            wiki_lint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
