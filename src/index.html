@@ -1986,36 +1986,36 @@
               }
             }
           } else if (key === 'mkdir') {
-            // B group degrade: catch + show "暂未提供" card, don't crash.
+            // M3.3: 走通用 run_windcli，不再有降级卡。空 path 时短路返回。
             const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
             const path = tokens[tokens.length - 1] || 'newdir';
             try {
-              result = await invoke('mkdir_dir', { path });
+              result = await invoke('run_windcli', { args: ['mkdir', path] });
               displayWindResult(aid, text, result, 'mkdir');
             } catch (e) {
-              result = { ok: false, stdout: '', stderr: 'mkdir 暂未在 v0.2.29 提供', deferred: true };
+              result = { ok: false, stdout: '', stderr: String(e) };
               displayWindResult(aid, text, result, 'mkdir');
             }
           } else if (key === 'wft') {
-            // B group degrade
+            // M3.3: 走通用 run_windcli
             const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
             const file = tokens[tokens.length - 1] || 'test.txt';
             try {
-              result = await invoke('wft_open', { file });
+              result = await invoke('run_windcli', { args: ['wft', 'file', file] });
               displayWindResult(aid, text, result, 'wft');
             } catch (e) {
-              result = { ok: false, stdout: '', stderr: 'wft 暂未在 v0.2.29 提供', deferred: true };
+              result = { ok: false, stdout: '', stderr: String(e) };
               displayWindResult(aid, text, result, 'wft');
             }
           } else {
-            // B group degrade: run_wind_command
+            // M3.3: B 组兜底改为通用 run_windcli（ls / write / wiki_status 等）
             const args = buildArgs(key, text);
             try {
-              result = await invoke('run_wind_command', { args });
-              displayWindResult(aid, text, result, args[0]);
+              result = await invoke('run_windcli', { args });
+              displayWindResult(aid, text, result, args[0] || 'wind');
             } catch (e) {
-              result = { ok: false, stdout: '', stderr: 'run_wind_command 暂未在 v0.2.29 提供', deferred: true };
-              displayWindResult(aid, text, result, args[0]);
+              result = { ok: false, stdout: '', stderr: String(e) };
+              displayWindResult(aid, text, result, args[0] || 'wind');
             }
           }
         }

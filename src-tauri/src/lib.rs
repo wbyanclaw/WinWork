@@ -162,6 +162,26 @@ fn wiki_status() -> crate::wind::WindResult {
 // automatic; `data: Option<serde_json::Value>` lands in the frontend trace
 // via the existing `_recordLastCliCall` hook.
 
+// ── v1.0 M3.3 通用 run_windcli ──────────────────────────────────────
+// 一个薄壳：把 args 直接交给 `run_wind`，让前端可以用同一 invoke 调所有
+// wind-cli 子命令 (mkdir / wft / read / write / extract / 未来 wiki_* 等)。
+// 走 WindResult 而不是 CommandResult，省一层转换；前端 `displayWindResult`
+// 读同一套字段名。
+#[tauri::command]
+fn run_windcli(args: Vec<String>) -> crate::wind::WindResult {
+    if args.is_empty() {
+        return crate::wind::WindResult {
+            ok: false,
+            stdout: String::new(),
+            stderr: "run_windcli: no args".to_string(),
+            exit_code: 1,
+            data: None,
+        };
+    }
+    let parts: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    crate::wind::run_wind(&parts)
+}
+
 /// M5.2: ingest a source file into the wiki.
 /// Path may be absolute or workspace-relative; wind-cli resolves via
 /// the auto-injected --workspace. Frontend wires to the "📥 入库" button.
@@ -564,6 +584,8 @@ pub fn run() {
             wiki_ingest,
             wiki_query,
             wiki_lint,
+            // v1.0 M3.3 通用 run_windcli（替换 B 组降级卡）
+            run_windcli,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
