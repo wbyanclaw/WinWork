@@ -1804,40 +1804,213 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     }
 
-    // ── Command router ───────────────────────────────────────
-    // v0.2.30.1 hotfix: 默认分支从 'ls' 改为 'answer'。
-    // 旧 fallback 任何不命中的问题都错误撞 CLI；@yan 报告"任何问题都调 wind-cli"。
-    // 现在未命中明确写/工具意图时一律按"直接回答"走，不再默认触发 wind ls。
-    // Spec §3.1 L2.5: 简单 Q&A 不调 CLI. "temporary heuristic" 保留 spec 备注。
+    // ── Command router (M3.1 6-class) ──────────────────────────
+    // 6 类意图分类初版（@ruler 拍板 "关键词粗分 + 歧义时二判"）：
+    //   1. DIRECT_ANSWER   — Q&A / 解释 / 什么是（不调 CLI，配 apiKey 后走 LLM）
+    //   2. WORKSPACE_READ  — 列出 / 读 / 搜索 / 查看（run_windcli 调 ls/read/search）
+    //   3. WORKSPACE_WRITE — 创建/写/删除/打开（run_windcli 调 mkdir/write/rm/wft）
+    //   4. WIKI_QUERY      — 知识库问答（run_windcli wiki query）
+    //   5. WIKI_INGEST     — 知识库入库（run_windcli wiki ingest）
+    //   6. WIKI_ADMIN      — wiki 健康检查 + 状态（run_windcli wiki lint/status）
+    // 歧义时（写意图但缺 target）走"显式确认中间态"——不自动跑、不倒计时，
+    // 不弹降级卡；只渲染琥珀色确认卡 + 输入框 + 确认/取消按钮。
+    const INTENT = {
+      DIRECT_ANSWER: 'direct_answer',
+      WORKSPACE_READ: 'workspace_read',
+      WORKSPACE_WRITE: 'workspace_write',
+      WIKI_QUERY: 'wiki_query',
+      WIKI_INGEST: 'wiki_ingest',
+      WIKI_ADMIN: 'wiki_admin',
+    };
     const ROUTE_READ_ONLY = /(列举|列出|读取|读|搜索|查找|查看|看|翻译|解释|说明|什么是|是什么|介绍|简介|总结|概括|对比|区别|怎么用|如何|list|ls|read|search|find|show|view|translate|explain|what is|how to|summary|summarize|compare)/i;
     function routeCommand(text) {
       const t = text.toLowerCase();
-      // Read-only: if the message is just a question / lookup with no obvious
-      // write/mkdir/open intent, return "answer" and let send() handle it.
-      const hasWriteIntent = /(创建|写|put|新建|删除|删除|rm|delete|update|更新|write|mkdir|wft|打开|open|搜索.*并.*保存|保存到|入|入.*库|wiki|知识库)/i.test(text);
-      if (!hasWriteIntent && ROUTE_READ_ONLY.test(text)) {
-        return 'answer';
-      }
-      if (t.includes('列出') || t.includes('list') || t.includes('ls') || t.includes('文件')) return 'ls';
-      if (t.includes('创建') || t.includes('mkdir') || t.includes('目录') || t.includes('新建')) return 'mkdir';
-      if (t.includes('写') || t.includes('put') || t.includes('创建文件')) return 'write';
-      if (t.includes('wft') || t.includes('打开') || t.includes('open')) return 'wft';
-      if (t.includes('知识库查询') || t.includes('wiki query') || t.includes('查知识')) return 'wiki_query';
-      if (t.includes('知识库入库') || t.includes('wiki ingest') || t.includes('文档入库')) return 'wiki_ingest';
-      if (t.includes('wiki lint') || t.includes('健康检查')) return 'wiki_lint';
-      if (t.includes('wiki status') || t.includes('知识库状态')) return 'wiki_status';
-      // v0.2.30.1 hotfix: 默认走 'answer'，不再误撞 wind ls。
-      return 'answer';
+      // 1) Wiki intents 先判（write 关键词会和 wiki 撞，按 wiki 优先）
+      if (t.includes('知识库查询') || t.includes('wiki query') || t.includes('查知识')) return INTENT.WIKI_QUERY;
+      if (t.includes('知识库入库') || t.includes('wiki ingest') || t.includes('文档入库')) return INTENT.WIKI_INGEST;
+      if (t.includes('wiki lint') || t.includes('健康检查')) return INTENT.WIKI_ADMIN;
+      if (t.includes('wiki status') || t.includes('知识库状态')) return INTENT.WIKI_ADMIN;
+      // 2) Workspace write (高风险，先于 read)
+      if (t.includes('rm') || /\b删除\b/.test(text) || t.includes('delete')) return INTENT.WORKSPACE_WRITE;
+      if (t.includes('update') || t.includes('更新')) return INTENT.WORKSPACE_WRITE;
+      if (t.includes('mkdir') || /\b创建\b/.test(text) || t.includes('目录') || t.includes('新建')) return INTENT.WORKSPACE_WRITE;
+      if (t.includes('put') || t.includes('写文件') || t.includes('创建文件') || /\bwri(?:te|te?)$/.test(t)) return INTENT.WORKSPACE_WRITE;
+      if (t.includes('wft') || t.includes('打开') || t.includes('open')) return INTENT.WORKSPACE_WRITE;
+      // 3) Workspace read
+      if (t.includes('读') || t.includes('read') || t.includes('查看') || t.includes('看') || t.includes('cat')) return INTENT.WORKSPACE_READ;
+      if (t.includes('搜索') || t.includes('查找') || t.includes('search') || t.includes('find')) return INTENT.WORKSPACE_READ;
+      if (t.includes('列出') || t.includes('list') || t.includes('ls') || t.includes('文件')) return INTENT.WORKSPACE_READ;
+      // 4) 默认：直接回答（不调 CLI）
+      return INTENT.DIRECT_ANSWER;
     }
 
-    function buildArgs(key, text) {
-      switch (key) {
-        case 'ls': return ['ls'];  // Backend will add --json and workspace path
-        case 'write': return ['write', 'test.txt', '--stdin'];
-        case 'wiki_status': return ['wiki', 'status'];  // Backend handles --json
-        case 'wiki_lint': return ['wiki', 'lint'];  // Backend handles --json
-        default: return ['ls'];  // Backend will add --json and workspace path
+    // 解析文本到具体 wind-cli 调用计划。
+    // 返回：
+    //   { kind: 'auto',     intent, op, args }          — 立即可执行
+    //   { kind: 'confirm',  intent, op, prompt, partialArgs } — 需用户确认
+    //   { kind: 'direct'                              } — 走 LLM / apiKey 提示
+    // ── 显式确认中间态（M3.2）────────────────────────────────
+    // 渲染琥珀色确认卡：等用户在输入框填 target → 点"确认执行"才真发 run_windcli。
+    // 不自动跑、不倒计时（@ruler 风险点 #3）。
+    function renderConfirmCard(aid, text, plan) {
+      const bubble = document.getElementById(aid + '-bubble');
+      if (!bubble) return;
+      const id = aid + '-confirm';
+      // 用 inline data-* 传 plan，避免 escape 问题
+      const opEsc = escHtml(plan.op);
+      const intentEsc = escHtml(plan.intent);
+      const partialArgsJson = JSON.stringify(plan.partialArgs || []);
+      bubble.innerHTML = `
+        <p class="mb-2">${escHtml(text)}</p>
+        <div id="${id}" data-op="${opEsc}" data-intent="${intentEsc}" data-partial='${escHtml(partialArgsJson)}' class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
+          <div class="flex items-center gap-1.5 text-amber-700 font-medium">
+            <span>⚠️</span><span>需要你确认</span>
+          </div>
+          <div class="mt-1.5 text-xs text-amber-700">
+            我理解为 <span class="font-mono">$ wind ${opEsc}</span>。${escHtml(plan.prompt || '')}
+          </div>
+          <div class="mt-2 flex gap-2">
+            <input id="${id}-input" type="text" placeholder="目标路径 / 关键词" class="flex-1 px-2 py-1.5 rounded-md border border-amber-200 bg-white text-xs text-ink placeholder:text-faint focus:outline-none focus:border-amber-400" />
+            <button onclick="_confirmIntent('${aid}')" class="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-medium hover:opacity-90">确认执行</button>
+            <button onclick="_cancelConfirm('${aid}')" class="px-3 py-1.5 rounded-md bg-white border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-50">取消</button>
+          </div>
+          <div class="mt-1.5 text-[10px] text-amber-600">无 API Key · 关键词路由模式 · 不自动执行、不倒计时</div>
+        </div>`;
+      // 自动 focus 输入框
+      setTimeout(() => {
+        const inp = document.getElementById(id + '-input');
+        if (inp) { inp.focus(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); window._confirmIntent(aid); } }); }
+      }, 50);
+    }
+
+    // 拼出最终 wind-cli args（confirm 路径：partialArgs + 用户填的 target）
+    function _buildConfirmedArgs(plan, target) {
+      const t = (target || '').trim();
+      if (!t) return null;
+      const partial = plan.partialArgs || [];
+      // partial 是 ['mkdir'] / ['rm', 'foo'] / ['read', '--json'] / ['wiki', 'ingest', '--json'] 等
+      // target 永远加在 partial 末尾（特殊：rm/update 已经有 target 的 confirm 路径会让 partial 含 target，此时 target 应当替换）
+      if ((plan.op === 'rm' || plan.op === 'update') && partial.length >= 2 && partial[1] === plan.target) {
+        return partial; // 已有 target
       }
+      if (plan.op === 'read' && /\.(md|markdown|json|txt|yaml|yml|toml|csv|tsv|log)$/i.test(t)) {
+        return ['read', t, '--json'];
+      }
+      if (plan.op === 'wiki_ingest') return ['wiki', 'ingest', t, '--json'];
+      if (plan.op === 'wft') return ['wft', 'file', t];
+      if (plan.op === 'write') return ['write', t, '--stdin'];
+      // 通用：partial + target
+      return [...partial, t];
+    }
+
+    window._confirmIntent = async function(aid) {
+      const card = document.getElementById(aid + '-confirm');
+      if (!card) return;
+      const op = card.dataset.op;
+      const intent = card.dataset.intent;
+      let partialArgs = [];
+      try { partialArgs = JSON.parse(card.dataset.partial || '[]'); } catch (e) { partialArgs = []; }
+      const inp = document.getElementById(aid + '-confirm-input');
+      const target = (inp && inp.value || '').trim();
+      if (!target) { if (inp) { inp.placeholder = '请先填目标再确认'; inp.focus(); } return; }
+      const args = _buildConfirmedArgs({ op, intent, partialArgs }, target);
+      if (!args || args.length < 2) { if (inp) { inp.placeholder = '参数不足，请重新填'; inp.focus(); } return; }
+      // 替换气泡为执行中
+      const bubble = document.getElementById(aid + '-bubble');
+      if (bubble) {
+        bubble.innerHTML = `<p class="mb-2">${escHtml(aid + '_orig' in window ? '' : '')}</p><div class="text-faint text-xs">已确认：<span class="font-mono">wind ${args.join(' ')}</span></div>`;
+      }
+      let result;
+      try {
+        result = await invoke('run_windcli', { args });
+      } catch (e) {
+        result = { ok: false, stdout: '', stderr: String(e) };
+      }
+      const cmdName = args[0] === 'wiki' ? `wiki ${args[1] || ''}`.trim() : (op || args[0] || 'wind');
+      displayWindResult(aid, target, result, cmdName);
+      if (op === 'wiki_ingest' || op === 'wiki_lint' || op === 'rm' || op === 'mkdir' || op === 'write' || op === 'wft') {
+        setTimeout(() => loadFileTree(), 400);
+      }
+      lastResult = result;
+    };
+
+    window._cancelConfirm = function(aid) {
+      const card = document.getElementById(aid + '-confirm');
+      if (!card) return;
+      const op = card.dataset.op;
+      card.outerHTML = `
+        <div class="bg-slate-50 border border-border rounded-lg px-3 py-2 text-xs text-faint flex items-center gap-1.5">
+          <span>🚫</span><span>已取消 <span class="font-mono">${escHtml(op)}</span>（不会执行）</span>
+        </div>`;
+      lastResult = { ok: false, stdout: '', stderr: 'cancelled by user' };
+    };
+
+    function buildIntentPlan(intent, text) {
+      const t = text.trim();
+      const tl = t.toLowerCase();
+      const tokens = t.split(/\s+/).filter(Boolean);
+      const lastToken = tokens[tokens.length - 1] || '';
+      const looksLikePath = /[\\/.\w-]/.test(lastToken) && lastToken.length > 1 && !/^(呢|吗|吧|啊|的|了|我|你|他|她|它|是|在|有|没|不|要)$/.test(lastToken);
+
+      switch (intent) {
+        case INTENT.DIRECT_ANSWER:
+          return { kind: 'direct' };
+
+        case INTENT.WORKSPACE_READ: {
+          if (tl.includes('搜索') || tl.includes('查找') || tl.includes('search') || tl.includes('find')) {
+            // 搜索：query 是去掉搜索触发词后的全部文本
+            const q = t.replace(/(搜索|查找|search|find|一下)/gi, '').trim() || t;
+            return { kind: 'auto', intent, op: 'search', args: ['search', q, '--json'] };
+          }
+          if ((tl.includes('读') || tl.includes('read') || tl.includes('cat')) && looksLikePath) {
+            return { kind: 'auto', intent, op: 'read', args: ['read', lastToken, '--json'] };
+          }
+          if ((tl.includes('读') || tl.includes('read') || tl.includes('cat')) && !looksLikePath) {
+            return { kind: 'confirm', intent, op: 'read', prompt: '请输入要读取的文件路径：', partialArgs: ['read', '--json'] };
+          }
+          // 列出 / 看文件 → ls
+          return { kind: 'auto', intent, op: 'ls', args: ['ls', '--json'] };
+        }
+
+        case INTENT.WORKSPACE_WRITE: {
+          let sub = null;
+          if (tl.includes('rm') || /\b删除\b/.test(text) || tl.includes('delete')) sub = 'rm';
+          else if (tl.includes('update') || t.includes('更新')) sub = 'update';
+          else if (tl.includes('mkdir') || /\b创建\b/.test(text) || t.includes('目录') || t.includes('新建')) sub = 'mkdir';
+          else if (tl.includes('put') || t.includes('写文件') || t.includes('创建文件') || /\bwri(?:te|te?)$/.test(t)) sub = 'write';
+          else if (tl.includes('wft') || t.includes('打开') || tl.includes('open')) sub = 'wft';
+
+          if (!sub) sub = 'mkdir'; // fallback
+          if (looksLikePath) {
+            if (sub === 'rm') return { kind: 'confirm', intent, op: 'rm', target: lastToken, prompt: `确认删除 ${lastToken}？此操作不可撤销。`, partialArgs: ['rm', lastToken] };
+            if (sub === 'update') return { kind: 'confirm', intent, op: 'update', target: lastToken, prompt: `确认更新 ${lastToken}？`, partialArgs: ['update', lastToken] };
+            if (sub === 'mkdir') return { kind: 'auto', intent, op: 'mkdir', args: ['mkdir', lastToken] };
+            if (sub === 'write') return { kind: 'auto', intent, op: 'write', args: ['write', lastToken, '--stdin'] };
+            if (sub === 'wft') return { kind: 'auto', intent, op: 'wft', args: ['wft', 'file', lastToken] };
+          }
+          // 缺 target：进入显式确认
+          const prompts = {
+            mkdir: '请输入要创建的目录名：',
+            write: '请输入要写入的文件名：',
+            rm: '请输入要删除的路径：',
+            update: '请输入要更新的文件：',
+            wft: '请输入要打开的文件：',
+          };
+          return { kind: 'confirm', intent, op: sub, prompt: prompts[sub] || '请输入目标：', partialArgs: [sub] };
+        }
+
+        case INTENT.WIKI_QUERY:
+          return { kind: 'auto', intent, op: 'wiki_query', args: ['wiki', 'query', t, '--json'] };
+
+        case INTENT.WIKI_INGEST:
+          if (looksLikePath) return { kind: 'auto', intent, op: 'wiki_ingest', args: ['wiki', 'ingest', lastToken, '--json'] };
+          return { kind: 'confirm', intent, op: 'wiki_ingest', prompt: '请输入要入库的文件路径：', partialArgs: ['wiki', 'ingest', '--json'] };
+
+        case INTENT.WIKI_ADMIN:
+          if (tl.includes('lint') || t.includes('健康检查')) return { kind: 'auto', intent, op: 'wiki_lint', args: ['wiki', 'lint', '--json'] };
+          return { kind: 'auto', intent, op: 'wiki_status', args: ['wiki', 'status'] };
+      }
+      return { kind: 'direct' };
     }
 
     // ── Send ─────────────────────────────────────────────────
@@ -1921,13 +2094,12 @@
             msgs.scrollTop = msgs.scrollHeight;
           }, 500);
         } else {
-          // Use keyword routing mode
-          const key = routeCommand(text);
+          // M3.1: 6-class intent flow — 走 plan（auto / confirm / direct）
+          const intent = routeCommand(text);
+          const plan = buildIntentPlan(intent, text);
 
-          // v0.2.29.1 hotfix: read-only "answer" route — no wind-cli call.
-          // If the user only asked a read-only question and has no apiKey,
-          // prompt them to configure an API key rather than firing `wind ls`.
-          if (key === 'answer') {
+          if (plan.kind === 'direct') {
+            // DIRECT_ANSWER：只读问题，无 apiKey 时引导去配；有 apiKey 走 ai_chat
             const bubble = document.getElementById(aid + '-bubble');
             if (bubble) {
               bubble.innerHTML = `
@@ -1942,81 +2114,30 @@
                 </div>`;
             }
             result = { ok: false, stdout: '', stderr: 'read-only; awaiting apiKey', deferred: true };
-          } else
-
-          // C group wiki_* (M5.1+M5.3): 走真 invoke，result 走 displayWindResult
-          // 让 detail-trace / detail-source 自动接上，并把知识库 tab 切到可见。
-          if (key === 'wiki_query' || key === 'wiki_ingest' || key === 'wiki_lint' || key === 'wiki_status') {
-            const wikiOp = key.replace('wiki_', ''); // query / ingest / lint / status
-            const cmdName = `wiki ${wikiOp}`;
-            if (key === 'wiki_ingest') {
-              // 简单切词：拿最后一个 token 当 path；空时 prompt 用户
-              const tokens = text.split(/\s+/).filter(Boolean);
-              const lastToken = tokens[tokens.length - 1] || '';
-              const looksLikePath = /[\\/.\w-]/.test(lastToken) && lastToken.length > 1;
-              const path = looksLikePath ? lastToken : (window.prompt('请输入要入库的文件路径：', '') || '');
-              if (!path) {
-                result = { ok: false, stdout: '', stderr: 'wiki_ingest: 用户取消或未提供路径', deferred: true };
-                displayWindResult(aid, text, result, cmdName);
-                lastResult = result;
-                return;
-              }
-              try {
-                result = await invoke('wiki_ingest', { path });
-                displayWindResult(aid, text, result, cmdName);
+          } else if (plan.kind === 'confirm') {
+            // 显式确认中间态：渲染琥珀色确认卡，等用户填 target + 点确认
+            renderConfirmCard(aid, text, plan);
+            result = { ok: false, stdout: '', stderr: 'awaiting user confirmation', deferred: true };
+          } else if (plan.kind === 'auto') {
+            // auto：直接走 run_windcli
+            try {
+              result = await invoke('run_windcli', { args: plan.args });
+              const cmdName = plan.args[0] === 'wiki' ? `wiki ${plan.args[1] || ''}`.trim() : (plan.op || plan.args[0] || 'wind');
+              displayWindResult(aid, text, result, cmdName);
+              if (plan.op === 'wiki_ingest' || plan.op === 'wiki_lint' || plan.op === 'rm' || plan.op === 'mkdir' || plan.op === 'write' || plan.op === 'wft') {
+                // 涉及文件/知识库变动的 op 都刷新左栏
                 setTimeout(() => loadFileTree(), 400);
-              } catch (e) {
-                result = { ok: false, stdout: '', stderr: String(e) };
-                displayWindResult(aid, text, result, cmdName);
               }
-            } else {
-              try {
-                if (key === 'wiki_query') {
-                  result = await invoke('wiki_query', { question: text });
-                } else if (key === 'wiki_lint') {
-                  result = await invoke('wiki_lint');
-                  setTimeout(() => loadFileTree(), 400);
-                } else {
-                  result = await invoke('wiki_status');
-                }
-                displayWindResult(aid, text, result, cmdName);
-              } catch (e) {
-                result = { ok: false, stdout: '', stderr: String(e) };
-                displayWindResult(aid, text, result, cmdName);
-              }
-            }
-          } else if (key === 'mkdir') {
-            // M3.3: 走通用 run_windcli，不再有降级卡。空 path 时短路返回。
-            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
-            const path = tokens[tokens.length - 1] || 'newdir';
-            try {
-              result = await invoke('run_windcli', { args: ['mkdir', path] });
-              displayWindResult(aid, text, result, 'mkdir');
             } catch (e) {
               result = { ok: false, stdout: '', stderr: String(e) };
-              displayWindResult(aid, text, result, 'mkdir');
-            }
-          } else if (key === 'wft') {
-            // M3.3: 走通用 run_windcli
-            const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
-            const file = tokens[tokens.length - 1] || 'test.txt';
-            try {
-              result = await invoke('run_windcli', { args: ['wft', 'file', file] });
-              displayWindResult(aid, text, result, 'wft');
-            } catch (e) {
-              result = { ok: false, stdout: '', stderr: String(e) };
-              displayWindResult(aid, text, result, 'wft');
+              const cmdName = plan.args[0] === 'wiki' ? `wiki ${plan.args[1] || ''}`.trim() : (plan.op || plan.args[0] || 'wind');
+              displayWindResult(aid, text, result, cmdName);
             }
           } else {
-            // M3.3: B 组兜底改为通用 run_windcli（ls / write / wiki_status 等）
-            const args = buildArgs(key, text);
-            try {
-              result = await invoke('run_windcli', { args });
-              displayWindResult(aid, text, result, args[0] || 'wind');
-            } catch (e) {
-              result = { ok: false, stdout: '', stderr: String(e) };
-              displayWindResult(aid, text, result, args[0] || 'wind');
-            }
+            // 兜底：未知 plan，弹 blue 卡
+            const bubble = document.getElementById(aid + '-bubble');
+            if (bubble) bubble.innerHTML = `<div class="text-xs text-faint">（未识别意图）</div>`;
+            result = { ok: false, stdout: '', stderr: 'unknown plan' };
           }
         }
 
