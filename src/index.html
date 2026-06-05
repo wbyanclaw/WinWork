@@ -457,23 +457,42 @@
             <span class="w-4 h-4">✕</span></span>
           </button>
         </div>
-        <!-- Detail tabs: file / trace / source -->
+        <!-- Detail tabs: file / trace / source / wiki -->
         <div id="details-tabs" class="flex gap-1 bg-slate-50 rounded-lg p-0.5">
           <button onclick="switchTab('file', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-file">文件信息</button>
           <button onclick="switchTab('trace', this)" class="detail-tab active flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-trace">完整 trace</button>
           <button onclick="switchTab('source', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-source">溯源</button>
+          <button onclick="switchTab('wiki', this)" class="detail-tab flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all" id="tab-wiki">📚 知识库</button>
         </div>
       </div>
       <div class="flex-1 overflow-y-auto px-5 py-4" id="detailContent">
         <div id="details-panel">
           <div id="detail-placeholder" class="flex flex-col items-center justify-center h-full text-center gap-3 text-faint">
             <span class="w-8 h-8">ℹ️</span></span>
-            <p class="text-sm">点击对话中的工具卡片<br>查看文件信息 / 完整 trace / 溯源</p>
+            <p class="text-sm">点击对话中的工具卡片<br>查看文件信息 / 完整 trace / 溯源 / 知识库</p>
           </div>
           <div id="detail-file" class="hidden"></div>
           <div id="detail-trace" class="hidden"></div>
           <div id="detail-source" class="hidden">
             <div class="text-faint text-center py-6 text-sm">暂无溯源数据</div>
+          </div>
+          <div id="detail-wiki" class="hidden">
+            <!-- M5.1+M5.3: 知识库内容面板。状态/操作/历史 3 段。
+                 第一次切到本 tab 时通过 initWikiPanel() 调 wiki_status 拉一次。 -->
+            <div id="wiki-panel-status" class="mb-4 px-3 py-2.5 rounded-lg border border-border bg-slate-50 text-xs text-faint">知识库状态：检测中…</div>
+            <div class="mb-4 space-y-2">
+              <div class="flex gap-2">
+                <button id="wiki-btn-ingest" class="flex-1 px-3 py-2 rounded-lg bg-brand text-white text-xs font-medium hover:opacity-90 transition-all">📥 入库文件</button>
+                <button id="wiki-btn-lint" class="flex-1 px-3 py-2 rounded-lg bg-white border border-border text-ink text-xs font-medium hover:bg-slate-50 transition-all">🔍 Lint</button>
+                <button id="wiki-btn-refresh" class="px-3 py-2 rounded-lg bg-white border border-border text-ink text-xs font-medium hover:bg-slate-50 transition-all" title="刷新状态">↻</button>
+              </div>
+              <div class="flex gap-2">
+                <input id="wiki-query-input" type="text" placeholder="向知识库提问…（回车提交）" class="flex-1 px-3 py-2 rounded-lg border border-border bg-white text-xs text-ink placeholder:text-faint focus:outline-none focus:border-brand" />
+                <button id="wiki-btn-query" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:opacity-90 transition-all">问</button>
+              </div>
+            </div>
+            <div id="wiki-panel-result" class="text-xs text-faint">操作结果会显示在这里</div>
+            <div id="wiki-panel-history" class="mt-4 space-y-1.5"></div>
           </div>
         </div>
       </div>
@@ -1442,52 +1461,168 @@
     });
 
     // ── Wiki ─────────────────────────────────────────────────
-    // v0.2.29: wiki_ingest / wiki_lint are deferred to v0.3.0 (C group).
-    // These entry points stay visible (so users see the section is
-    // recognized) but never reach a missing backend. UI shows an
-    // explicit amber card pointing at v0.3.0.
-    async function doWikiIngest() {
-      const storedPath = appState.wikiPath;
-      const path = storedPath || prompt('请输入要入库的文件路径：');
-      if (!path) return;
-      appendMessage('user', `wiki ingest: ${path}`, document.getElementById('messages'));
-      const aid = 'w' + Date.now();
-      appendAgentThinking(aid, document.getElementById('messages'));
-      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      const bubble = document.getElementById(aid + '-bubble');
-      if (bubble) {
-        bubble.innerHTML = `
-          <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
-            <div class="flex items-center gap-1.5 text-amber-700 font-medium">
-              <span>📚</span><span>wiki ingest 在 v0.2.29 未提供</span>
-            </div>
-            <div class="mt-1 text-xs text-amber-600">
-              知识库完整闭环（wiki build / ingest / query / precompile）属于 v0.3.0 路线。
-              本版本仅承诺工作区基本交互。
-            </div>
-          </div>`;
+    // M5.1+M5.3: 知识库内容面板 + 4 command 真实 invoke。
+    // 旧版 doWikiIngest / doWikiLint 都是 v0.2.29 的 amber 降级卡，
+    // 现在改成真 invoke：状态/操作/历史 三段式面板。
+    // 入口 1：用户说"知识库查询/入库/lint/状态"（routeCommand 走 send() 里 wiki_* 分支）
+    // 入口 2：右栏点 📚 知识库 tab 后点按钮（这里）
+    let _wikiPanelInitDone = false;
+    let _wikiHistory = []; // [{ op, ok, summary, at }]
+
+    async function initWikiPanel() {
+      if (_wikiPanelInitDone) return;
+      const btnIngest = document.getElementById('wiki-btn-ingest');
+      const btnLint = document.getElementById('wiki-btn-lint');
+      const btnRefresh = document.getElementById('wiki-btn-refresh');
+      const btnQuery = document.getElementById('wiki-btn-query');
+      const input = document.getElementById('wiki-query-input');
+      if (btnIngest) btnIngest.onclick = wikiPanelIngest;
+      if (btnLint) btnLint.onclick = wikiPanelLint;
+      if (btnRefresh) btnRefresh.onclick = () => wikiPanelStatus(true);
+      if (btnQuery) btnQuery.onclick = () => {
+        const q = (input && input.value || '').trim();
+        if (q) wikiPanelQuery(q);
+      };
+      if (input) {
+        input.onkeydown = (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            const q = (input.value || '').trim();
+            if (q) { wikiPanelQuery(q); input.value = ''; }
+          }
+        };
       }
-      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+      _wikiPanelInitDone = true;
+      await wikiPanelStatus(false);
+    }
+    window._initWikiPanel = initWikiPanel;
+
+    function _setWikiStatusHtml(html) {
+      const el = document.getElementById('wiki-panel-status');
+      if (el) el.innerHTML = html;
+    }
+    function _setWikiResultHtml(html) {
+      const el = document.getElementById('wiki-panel-result');
+      if (el) el.innerHTML = html;
+    }
+    function _appendWikiHistoryItem(item) {
+      _wikiHistory.unshift(item);
+      if (_wikiHistory.length > 20) _wikiHistory.pop();
+      const el = document.getElementById('wiki-panel-history');
+      if (!el) return;
+      el.innerHTML = _wikiHistory.map((h) => `
+        <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md ${h.ok ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'} text-[11px]">
+          <span class="${h.ok ? 'text-emerald-600' : 'text-red-500'}">${h.ok ? '✓' : '✗'}</span>
+          <span class="text-muted">${new Date(h.at).toLocaleTimeString()}</span>
+          <span class="font-mono text-ink">${escHtml(h.op)}</span>
+          <span class="text-faint truncate flex-1" title="${escHtml(h.summary)}">${escHtml(h.summary)}</span>
+        </div>
+      `).join('');
     }
 
-    async function doWikiLint() {
-      appendMessage('user', 'wiki lint', document.getElementById('messages'));
-      const aid = 'w' + Date.now();
-      appendAgentThinking(aid, document.getElementById('messages'));
-      try { if(window.lucide && window._lucideReady) lucide.createIcons(); } catch(e) { window._log && window._log("lucide.createIcons() failed:", e); }
-      const bubble = document.getElementById(aid + '-bubble');
-      if (bubble) {
-        bubble.innerHTML = `
-          <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
-            <div class="flex items-center gap-1.5 text-amber-700 font-medium">
-              <span>📚</span><span>wiki lint 在 v0.2.29 未提供</span>
-            </div>
-            <div class="mt-1 text-xs text-amber-600">
-              知识库健康检查属于 v0.3.0 路线，本版本不提供。
-            </div>
-          </div>`;
+    async function wikiPanelStatus(verbose) {
+      _setWikiStatusHtml('知识库状态：检测中…');
+      if (verbose) _setWikiResultHtml('<div class="text-faint">调 wiki_status…</div>');
+      try {
+        const r = await invoke('wiki_status');
+        if (r && r.ok) {
+          _setWikiStatusHtml(`<div class="flex items-center gap-1.5"><span class="text-emerald-600">✓</span><span>知识库可用</span></div>`);
+          if (verbose) _setWikiResultHtml(`<pre class="font-mono text-[11px] text-slate-700 whitespace-pre-wrap">${escHtml(JSON.stringify(r.data || r, null, 2).slice(0, 1500))}</pre>`);
+        } else {
+          const reason = (r && r.stderr) || '未知原因';
+          _setWikiStatusHtml(`<div class="flex items-center gap-1.5 text-amber-700"><span>⚠️</span><span>知识库不可用</span><span class="text-faint">· ${escHtml(reason)}</span></div>`);
+          if (verbose) _setWikiResultHtml(`<div class="text-red-600 text-[11px]">${escHtml(reason)}</div>`);
+        }
+        _appendWikiHistoryItem({ op: 'wiki status', ok: !!(r && r.ok), summary: (r && r.ok) ? 'available' : (r && r.stderr) || 'unavailable', at: Date.now() });
+        return r;
+      } catch (e) {
+        _setWikiStatusHtml(`<div class="flex items-center gap-1.5 text-red-600"><span>✗</span><span>检测失败</span><span class="text-faint">· ${escHtml(String(e))}</span></div>`);
+        _appendWikiHistoryItem({ op: 'wiki status', ok: false, summary: String(e), at: Date.now() });
+        return null;
       }
-      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    async function wikiPanelIngest() {
+      // M5.1: 用 Tauri 文件选择器（与新建文件一致）拿 path；fallback 到 prompt
+      let path = '';
+      try {
+        if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.dialog.open) {
+          const picked = await window.__TAURI__.dialog.open({
+            multiple: false,
+            directory: false,
+            title: '选择要入库的文件'
+          });
+          if (typeof picked === 'string') path = picked;
+          else if (picked && picked.path) path = picked.path;
+        }
+      } catch (e) { window._log && window._log('tauri dialog open failed:', e); }
+      if (!path) path = window.prompt('请输入要入库的文件路径：', '') || '';
+      if (!path) return;
+      _setWikiResultHtml('<div class="text-faint">正在入库…</div>');
+      try {
+        const r = await invoke('wiki_ingest', { path });
+        _setWikiResultHtml(_renderWindResultCard('wiki ingest', r));
+        _appendWikiHistoryItem({ op: 'wiki ingest', ok: !!(r && r.ok), summary: path, at: Date.now() });
+        if (r && r.ok) setTimeout(() => loadFileTree(), 400);
+      } catch (e) {
+        _setWikiResultHtml(`<div class="text-red-600 text-[11px]">${escHtml(String(e))}</div>`);
+        _appendWikiHistoryItem({ op: 'wiki ingest', ok: false, summary: String(e), at: Date.now() });
+      }
+    }
+
+    async function wikiPanelLint() {
+      _setWikiResultHtml('<div class="text-faint">正在 lint…</div>');
+      try {
+        const r = await invoke('wiki_lint');
+        _setWikiResultHtml(_renderWindResultCard('wiki lint', r));
+        _appendWikiHistoryItem({ op: 'wiki lint', ok: !!(r && r.ok), summary: (r && r.data && r.data.file_count) ? `${r.data.file_count} files` : 'done', at: Date.now() });
+      } catch (e) {
+        _setWikiResultHtml(`<div class="text-red-600 text-[11px]">${escHtml(String(e))}</div>`);
+        _appendWikiHistoryItem({ op: 'wiki lint', ok: false, summary: String(e), at: Date.now() });
+      }
+    }
+
+    async function wikiPanelQuery(q) {
+      _setWikiResultHtml('<div class="text-faint">思考中…</div>');
+      try {
+        const r = await invoke('wiki_query', { question: q });
+        // QueryResult JSON 里有 answer + sources；这里把 answer 提到最上面，data 完整保留
+        const answer = (r && r.data && (r.data.answer || r.data.response)) || (r && r.stdout) || '';
+        const sources = (r && r.data && Array.isArray(r.data.sources)) ? r.data.sources : [];
+        const sourcesHtml = sources.length
+          ? `<div class="mt-2 text-[10px] text-faint">来源：${sources.slice(0, 5).map((s) => escHtml(String(s))).join(' · ')}</div>`
+          : '';
+        _setWikiResultHtml(`
+          <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+            <div class="text-[11px] text-emerald-700 font-medium mb-1">Q · ${escHtml(q)}</div>
+            <div class="text-[12px] text-slate-800 leading-relaxed whitespace-pre-wrap">${escHtml(answer || '（无回答）')}</div>
+            ${sourcesHtml}
+          </div>
+          ${_renderWindResultCard('wiki query', r, true)}
+        `);
+        _appendWikiHistoryItem({ op: 'wiki query', ok: !!(r && r.ok), summary: q.slice(0, 40), at: Date.now() });
+      } catch (e) {
+        _setWikiResultHtml(`<div class="text-red-600 text-[11px]">${escHtml(String(e))}</div>`);
+        _appendWikiHistoryItem({ op: 'wiki query', ok: false, summary: String(e), at: Date.now() });
+      }
+    }
+
+    function _renderWindResultCard(cmd, r, compact) {
+      const ok = !!(r && r.ok);
+      const okBadge = ok
+        ? '<span class="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-medium">✓ 成功</span>'
+        : '<span class="text-[10px] bg-red-100 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full font-medium">✗ 失败</span>';
+      const stdout = (r && r.stdout) ? escHtml(String(r.stdout).slice(0, compact ? 800 : 2000)) : '';
+      const stderr = (r && r.stderr) ? `<div class="text-[11px] text-red-500 mt-1">${escHtml(String(r.stderr).slice(0, 400))}</div>` : '';
+      return `
+        <div class="${compact ? 'mt-2' : 'mt-3'} rounded-lg border border-border overflow-hidden">
+          <div class="bg-slate-50 border-b border-border px-3 py-1.5 flex items-center gap-1.5">
+            <span class="text-[10px] text-muted font-mono">$ wind ${escHtml(cmd)}</span>
+            ${okBadge}
+          </div>
+          ${stdout ? `<div class="px-3 py-2"><pre class="font-mono text-[11px] text-slate-700 whitespace-pre-wrap">${stdout}</pre></div>` : ''}
+          ${stderr}
+        </div>`;
     }
 
     // ── Helpers ─────────────────────────────────────────────
@@ -1624,10 +1759,15 @@
       }
 
       // Show matching detail panel, hide the others
-      ['file', 'trace', 'source'].forEach((k) => {
+      ['file', 'trace', 'source', 'wiki'].forEach((k) => {
         const el = document.getElementById('detail-' + k);
         if (el) el.classList.toggle('hidden', k !== name);
       });
+
+      // M5.1: 第一次切到 wiki tab 时初始化（拉一次 wiki_status）
+      if (name === 'wiki' && typeof window._initWikiPanel === 'function') {
+        window._initWikiPanel();
+      }
     }
 
     function highlightJSON(obj) {
@@ -1684,7 +1824,8 @@
       if (t.includes('wft') || t.includes('打开') || t.includes('open')) return 'wft';
       if (t.includes('知识库查询') || t.includes('wiki query') || t.includes('查知识')) return 'wiki_query';
       if (t.includes('知识库入库') || t.includes('wiki ingest') || t.includes('文档入库')) return 'wiki_ingest';
-      if (t.includes('wiki lint') || t.includes('健康检查') || t.includes('wiki status')) return 'wiki_status';
+      if (t.includes('wiki lint') || t.includes('健康检查')) return 'wiki_lint';
+      if (t.includes('wiki status') || t.includes('知识库状态')) return 'wiki_status';
       // v0.2.30.1 hotfix: 默认走 'answer'，不再误撞 wind ls。
       return 'answer';
     }
@@ -1803,25 +1944,47 @@
             result = { ok: false, stdout: '', stderr: 'read-only; awaiting apiKey', deferred: true };
           } else
 
-          // C group (defer to v0.3.0): wiki_* — never reach an unhandled
-          // invoke('wiki_*'); render a structured "v0.3.0 即将到来" card
-          // so the user can see the route is recognized, not a crash.
-          if (key === 'wiki_query' || key === 'wiki_ingest' || key === 'wiki_lint') {
-            const wikiOp = key.replace('wiki_', ''); // query / ingest / lint
-            const bubble = document.getElementById(aid + '-bubble');
-            if (bubble) {
-              bubble.innerHTML = `
-                <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-sm">
-                  <div class="flex items-center gap-1.5 text-amber-700 font-medium">
-                    <span>📚</span><span>知识库 ${wikiOp} 在 v0.2.29 未提供</span>
-                  </div>
-                  <div class="mt-1 text-xs text-amber-600">
-                    知识库完整闭环（wiki build / ingest / query / precompile）属于 v0.3.0 路线。
-                    本版本仅承诺工作区基本交互。如需立即试用，请直接用 wind-cli 调用 wiki 子命令。
-                  </div>
-                </div>`;
+          // C group wiki_* (M5.1+M5.3): 走真 invoke，result 走 displayWindResult
+          // 让 detail-trace / detail-source 自动接上，并把知识库 tab 切到可见。
+          if (key === 'wiki_query' || key === 'wiki_ingest' || key === 'wiki_lint' || key === 'wiki_status') {
+            const wikiOp = key.replace('wiki_', ''); // query / ingest / lint / status
+            const cmdName = `wiki ${wikiOp}`;
+            if (key === 'wiki_ingest') {
+              // 简单切词：拿最后一个 token 当 path；空时 prompt 用户
+              const tokens = text.split(/\s+/).filter(Boolean);
+              const lastToken = tokens[tokens.length - 1] || '';
+              const looksLikePath = /[\\/.\w-]/.test(lastToken) && lastToken.length > 1;
+              const path = looksLikePath ? lastToken : (window.prompt('请输入要入库的文件路径：', '') || '');
+              if (!path) {
+                result = { ok: false, stdout: '', stderr: 'wiki_ingest: 用户取消或未提供路径', deferred: true };
+                displayWindResult(aid, text, result, cmdName);
+                lastResult = result;
+                return;
+              }
+              try {
+                result = await invoke('wiki_ingest', { path });
+                displayWindResult(aid, text, result, cmdName);
+                setTimeout(() => loadFileTree(), 400);
+              } catch (e) {
+                result = { ok: false, stdout: '', stderr: String(e) };
+                displayWindResult(aid, text, result, cmdName);
+              }
+            } else {
+              try {
+                if (key === 'wiki_query') {
+                  result = await invoke('wiki_query', { question: text });
+                } else if (key === 'wiki_lint') {
+                  result = await invoke('wiki_lint');
+                  setTimeout(() => loadFileTree(), 400);
+                } else {
+                  result = await invoke('wiki_status');
+                }
+                displayWindResult(aid, text, result, cmdName);
+              } catch (e) {
+                result = { ok: false, stdout: '', stderr: String(e) };
+                displayWindResult(aid, text, result, cmdName);
+              }
             }
-            result = { ok: false, stdout: '', stderr: 'v0.2.29 不提供 wiki_' + wikiOp, deferred_to: 'v0.3.0' };
           } else if (key === 'mkdir') {
             // B group degrade: catch + show "暂未提供" card, don't crash.
             const tokens = text.split(/\s+/).filter(t => t && !/^[^\s\u4e00-\u9fff]+$/.test(t) || t.length > 1);
