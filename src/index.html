@@ -1915,10 +1915,10 @@
       if (!target) { if (inp) { inp.placeholder = '请先填目标再确认'; inp.focus(); } return; }
       const args = _buildConfirmedArgs({ op, intent, partialArgs }, target);
       if (!args || args.length < 2) { if (inp) { inp.placeholder = '参数不足，请重新填'; inp.focus(); } return; }
-      // 替换气泡为执行中
+      // 替换气泡为"已确认"占位（displayWindResult 会在 invoke 之后覆盖）
       const bubble = document.getElementById(aid + '-bubble');
       if (bubble) {
-        bubble.innerHTML = `<p class="mb-2">${escHtml(aid + '_orig' in window ? '' : '')}</p><div class="text-faint text-xs">已确认：<span class="font-mono">wind ${args.join(' ')}</span></div>`;
+        bubble.innerHTML = `<div class="text-faint text-xs">已确认：<span class="font-mono">wind ${args.map(escHtml).join(' ')}</span> · 执行中…</div>`;
       }
       let result;
       try {
