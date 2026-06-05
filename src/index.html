@@ -343,6 +343,28 @@
           <span id="aboutWorkspace" class="font-mono text-ink truncate ml-2" title="">…</span>
         </div>
       </div>
+      <!-- v0.2.32 hotfix: 诊断可见性 — 用户能自己看到 wind 探测的 raw stdout/stderr/exit_code -->
+      <details class="bg-slate-50 border border-border rounded-lg text-xs">
+        <summary class="px-3 py-2 cursor-pointer text-muted hover:text-ink select-none">诊断信息（点开查看 wind-cli 探测原始输出）</summary>
+        <div class="px-3 pb-3 space-y-1.5 font-mono text-[11px] leading-relaxed">
+          <div class="flex justify-between gap-2">
+            <span class="text-muted">探测 flag</span>
+            <span id="aboutWindcliFlag" class="text-ink truncate">…</span>
+          </div>
+          <div class="flex justify-between gap-2">
+            <span class="text-muted">退出码</span>
+            <span id="aboutWindcliExit" class="text-ink">…</span>
+          </div>
+          <div>
+            <div class="text-muted mb-1">stdout（前 4KB）</div>
+            <pre id="aboutWindcliStdout" class="bg-white border border-border rounded p-2 whitespace-pre-wrap break-all text-ink max-h-32 overflow-auto">（空）</pre>
+          </div>
+          <div>
+            <div class="text-muted mb-1">stderr（前 4KB）</div>
+            <pre id="aboutWindcliStderr" class="bg-white border border-border rounded p-2 whitespace-pre-wrap break-all text-ink max-h-32 overflow-auto">（空）</pre>
+          </div>
+        </div>
+      </details>
       <a id="aboutReleaseLink" href="https://github.com/wbyanclaw/winwork/releases/latest" target="_blank" rel="noopener" class="block w-full text-center px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
         在 GitHub 查看最新 release
       </a>
@@ -481,16 +503,26 @@
       return null;
     });
     const normalizeEnvironmentStatus = window.normalizeEnvironmentStatus || ((input) => {
-      const current = parseWindVersion(input?.windcli?.version ?? '');
+      const installed = input?.windcli?.found === 'true';
+      const versionRaw = input?.windcli?.version ?? '';
+      const current = installed ? parseWindVersion(versionRaw) : null;
+      // v0.2.32 hotfix: 探测诊断字段
       return {
         winwork: { version: input?.winworkVersion ?? 'unknown' },
         windcli: {
-          installed: input?.windcli?.found === 'true',
+          installed,
           current,
           latest: current,
           up_to_date: Boolean(current),
           path: input?.windcli?.path ?? '',
-          display: current ? `wind-cli ${current}` : 'wind-cli 未安装'
+          version_raw: versionRaw,
+          version_flag: input?.windcli?.version_flag ?? '',
+          exit_code: input?.windcli?.exit_code ?? '',
+          raw_stdout: input?.windcli?.raw_stdout ?? '',
+          raw_stderr: input?.windcli?.raw_stderr ?? '',
+          display: !installed
+            ? 'wind-cli 未安装'
+            : (current ? `wind-cli ${current}` : `wind-cli 探测失败`)
         },
         wiki: {
           available: input?.wiki?.found === 'true',
@@ -1027,7 +1059,7 @@
     }
 
     // ── Environment Check ─────────────────────────────────────
-    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', winworkVersion: '0.2.18' };
+    let envState = { windcli: false, llmwiki: false, windcliPath: '', windcliVersion: '', windcliVersionFlag: '', windcliExitCode: '', windcliRawStdout: '', windcliRawStderr: '', winworkVersion: '0.2.18' };
 
     async function checkAllEnv() {
       const statusBar = document.getElementById('envStatusBar');
@@ -1045,6 +1077,11 @@
         envState.windcli = envStatus.windcli.installed;
         envState.windcliPath = envStatus.windcli.path;
         envState.windcliVersion = envStatus.windcli.current || 'unknown';
+        // v0.2.32 hotfix: 探测诊断字段
+        envState.windcliVersionFlag = envStatus.windcli.version_flag || '';
+        envState.windcliExitCode = envStatus.windcli.exit_code || '';
+        envState.windcliRawStdout = envStatus.windcli.raw_stdout || '';
+        envState.windcliRawStderr = envStatus.windcli.raw_stderr || '';
         envState.llmwiki = envStatus.wiki.available;
 
         // Update version badge in header
@@ -1064,8 +1101,18 @@
           const info = await invoke('check_windcli');
           envState.windcli = info.found === 'true';
           envState.windcliPath = info.path || '';
-          const parsed = parseWindVersion(info.version || '');
-          envState.windcliVersion = parsed || 'unknown';
+          // v0.2.32 hotfix: 探测链 raw 字段也带过来
+          const raw = info.version || '';
+          if (raw === '未安装' || info.found !== 'true') {
+            envState.windcliVersion = '未安装';
+          } else {
+            const parsed = parseWindVersion(raw);
+            envState.windcliVersion = parsed || raw || '探测失败';
+          }
+          envState.windcliVersionFlag = info.version_flag || '';
+          envState.windcliExitCode = info.exit_code || '';
+          envState.windcliRawStdout = info.raw_stdout || '';
+          envState.windcliRawStderr = info.raw_stderr || '';
         } catch(e2) { envState.windcli = false; }
 
         try {
@@ -1098,11 +1145,34 @@
         topWinwork.textContent = 'windwork ' + (envState.winworkVersion || 'unknown');
       }
       if (topWindcli) {
+        // v0.2.32 hotfix: 顶栏 wind-cli 显示策略 3 档：
+        //   1) 未安装 -> `wind-cli 未安装`（红色 + 红点）
+        //   2) 装了且可解析版本 -> `wind-cli X.Y.Z`
+        //   3) 装了但探测失败 -> `wind-cli 探测失败（点开 About 看详情）`
+        const v = envState.windcliVersion || '探测失败';
+        let display, tip, statusClass;
+        if (!envState.windcli) {
+          display = 'wind-cli 未安装';
+          tip = '未检测到 wind-cli；点击检查/升级';
+          statusClass = 'text-red-600 border-red-200';
+        } else if (v === '探测失败' || v === 'unknown') {
+          display = 'wind-cli 探测失败';
+          tip = '点击查看诊断信息（点 winwork 弹 About modal）';
+          statusClass = 'text-amber-700 border-amber-200';
+        } else {
+          display = 'wind-cli ' + v;
+          tip = '点击检查/升级 wind-cli（当前版本: ' + v + '）';
+          statusClass = '';
+        }
         const topWindcliText = document.getElementById('topWindcliText');
         if (topWindcliText) {
-          topWindcliText.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+          topWindcliText.textContent = display;
         } else {
-          topWindcli.textContent = 'wind-cli ' + (envState.windcliVersion || 'unknown');
+          topWindcli.textContent = display;
+        }
+        topWindcli.title = tip;
+        if (statusClass) {
+          topWindcli.className = topWindcli.className.replace(/text-\S+\s+border-\S+/g, '').trim() + ' ' + statusClass;
         }
       }
 
@@ -1245,6 +1315,8 @@
     // ── Winwork About entry (v0.2.30.1 hotfix) ────────────────
     // Pill click -> open About modal. Mirrors envState + workspace path.
     // v0.2.30.1 在此处落"顶栏 winwork 入口"补回；之前忘加 onclick。
+    // v0.2.32 hotfix: 诊断区域展示 wind-cli 探测的 raw stdout/stderr/exit_code/flag
+    // 让用户和工程侧都能在 About modal 里看到 wind 实际输出了什么。
     async function showAboutModal() {
       const modal = document.getElementById('aboutModal');
       if (!modal) return;
@@ -1255,6 +1327,12 @@
       set('aboutVersion', 'v' + winworkVer);
       set('aboutWinworkVer', 'v' + winworkVer);
       set('aboutWindcliVer', windcliVer);
+      // v0.2.32 hotfix: 诊断区域
+      set('aboutWindcliFlag', envState.windcliVersionFlag || '（未探测）');
+      set('aboutWindcliExit', envState.windcliExitCode || '（未探测）');
+      const setPre = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || '（空）'; };
+      setPre('aboutWindcliStdout', envState.windcliRawStdout);
+      setPre('aboutWindcliStderr', envState.windcliRawStderr);
       // 工作区路径：复用现有缓存；如无则拉一次
       let ws = _lastDisplayedWorkspacePath;
       if (!ws) {

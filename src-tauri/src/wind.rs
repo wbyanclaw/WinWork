@@ -459,6 +459,64 @@ pub fn build_wind_result(output: Result<std::process::Output, std::io::Error>) -
     }
 }
 
+/// Probe wind-cli version via a fallback chain.
+/// v0.2.32 hotfix: 之前只跑 `wind --version`，如果 wind-cli 版本太老 / 不支持
+/// 该 flag / 退出码非 0 就会卡在 "unknown"。现在按顺序试 --version / version / -V
+/// / -v / help，任一成功即返回；同时把 raw stdout / stderr / exit_code /
+/// 用了哪个 flag 一起存进 result，让前端 About modal 能展示原始输出。
+///
+/// Returns: (display_version, used_flag, raw_stdout, raw_stderr, exit_code)
+fn probe_wind_version() -> (String, String, String, String, String) {
+    let candidates: &[&[&str]] = &[
+        &["--version"],
+        &["version"],
+        &["-V"],
+        &["-v"],
+        &["help"],
+    ];
+    for flag in candidates {
+        let out = run_wind(flag);
+        if out.ok {
+            let stdout = out.stdout.trim().to_string();
+            if !stdout.is_empty() {
+                return (
+                    stdout,
+                    flag.join(" "),
+                    out.stdout,
+                    out.stderr,
+                    out.exit_code.to_string(),
+                );
+            }
+        } else {
+            // 即便 exit_code 非 0，某些 wind-cli 会把版本号打到 stderr (e.g. clap default)
+            let stderr = out.stderr.trim().to_string();
+            if !stderr.is_empty() && looks_like_version_line(&stderr) {
+                return (
+                    stderr,
+                    format!("{} (stderr)", flag.join(" ")),
+                    out.stdout,
+                    out.stderr,
+                    out.exit_code.to_string(),
+                );
+            }
+        }
+    }
+    (
+        "unknown".to_string(),
+        "none".to_string(),
+        String::new(),
+        String::new(),
+        "-1".to_string(),
+    )
+}
+
+fn looks_like_version_line(s: &str) -> bool {
+    let first = s.lines().next().unwrap_or("");
+    first.contains(|c: char| c.is_ascii_digit())
+        && first.contains('.')
+        && first.len() <= 128
+}
+
 /// Check if wind-cli is installed.
 pub fn check_windcli() -> HashMap<String, String> {
     let mut result = HashMap::new();
@@ -466,17 +524,24 @@ pub fn check_windcli() -> HashMap<String, String> {
         result.insert("found".to_string(), "true".to_string());
         result.insert("path".to_string(), path.clone());
         result.insert("workspace_path".to_string(), get_workspace_path());
-        let version_out = run_wind(&["--version"]);
+
+        // v0.2.32 hotfix: 探测链从单 --version 扩到多 fallback。
+        let (display, used_flag, raw_stdout, raw_stderr, exit_code) = probe_wind_version();
+        result.insert("version".to_string(), display);
+        result.insert("version_flag".to_string(), used_flag);
+        // raw_stdout/raw_stderr 截前 4KB，避免传输过大
         result.insert(
-            "version".to_string(),
-            if version_out.ok {
-                version_out.stdout.trim().to_string()
-            } else {
-                "unknown".to_string()
-            },
+            "raw_stdout".to_string(),
+            raw_stdout.chars().take(4096).collect::<String>(),
         );
+        result.insert(
+            "raw_stderr".to_string(),
+            raw_stderr.chars().take(4096).collect::<String>(),
+        );
+        result.insert("exit_code".to_string(), exit_code);
     } else {
         result.insert("found".to_string(), "false".to_string());
+        result.insert("version".to_string(), "未安装".to_string());
         result.insert(
             "install_url".to_string(),
             "https://github.com/wbyanclaw/wind-cli/releases/latest".to_string(),
