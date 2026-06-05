@@ -196,7 +196,7 @@
       <span data-tauri-drag-region>就绪</span>
     </span>
     <span id="topModel" onclick="showApiKeyModal()" title="点击配置模型 / API Key" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-100" data-tauri-drag-region>…</span>
-    <span id="topWinwork" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full" data-tauri-drag-region>windwork …</span>
+    <span id="topWinwork" onclick="showAboutModal()" title="点击查看 winwork 信息" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-100" data-tauri-drag-region>windwork …</span>
     <span id="topWindcli" onclick="handleWindcliPillClick()" title="点击检查/升级 wind-cli" class="text-xs text-muted bg-slate-50 border border-border px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-100 inline-flex items-center gap-1.5" data-tauri-drag-region>
       <span id="topWindcliText" data-tauri-drag-region>wind-cli …</span>
       <span id="topWindcliBadge" class="hidden w-1.5 h-1.5 rounded-full bg-red-500" data-tauri-drag-region></span>
@@ -309,6 +309,47 @@
   </div>
 </div>
 
+<!-- Winwork About Modal (v0.2.30.1 hotfix — 顶栏 winwork 入口) -->
+<div id="aboutModal" class="hidden fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-ink">关于 winwork</h3>
+      <button onclick="hideAboutModal()" class="text-slate-400 hover:text-slate-600">
+        <span class="w-5 h-5">✕</span></span>
+      </button>
+    </div>
+    <div class="space-y-3 text-sm">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 bg-ink rounded-xl flex items-center justify-center text-white text-xl">📁</div>
+        <div>
+          <div class="font-semibold text-ink">winwork</div>
+          <div class="text-xs text-faint font-mono" id="aboutVersion">…</div>
+        </div>
+      </div>
+      <p class="text-muted text-[13px] leading-relaxed">
+        Tauri 桌面应用，AI Agent 文件管理 demo，运行在 wind-cli 之上。
+      </p>
+      <div class="bg-slate-50 border border-border rounded-lg px-3 py-2 text-xs space-y-1.5">
+        <div class="flex justify-between">
+          <span class="text-muted">winwork 版本</span>
+          <span id="aboutWinworkVer" class="font-mono text-ink">…</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-muted">wind-cli 版本</span>
+          <span id="aboutWindcliVer" class="font-mono text-ink">…</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-muted">工作区</span>
+          <span id="aboutWorkspace" class="font-mono text-ink truncate ml-2" title="">…</span>
+        </div>
+      </div>
+      <a id="aboutReleaseLink" href="https://github.com/wbyanclaw/winwork/releases/latest" target="_blank" rel="noopener" class="block w-full text-center px-4 py-2 bg-brand text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+        在 GitHub 查看最新 release
+      </a>
+    </div>
+  </div>
+</div>
+
 <!-- Debug Log Panel -->
 <div id="debugLog" class="hidden">
   <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-700">
@@ -323,6 +364,13 @@
 
     <!-- Left File Tree -->
     <aside class="w-56 bg-white border-r border-border flex flex-col flex-shrink-0">
+      <!-- v0.2.30.1 hotfix: 新建对话按钮挪到顶部 (issue 5) -->
+      <div class="px-2 py-1.5 border-b border-border bg-slate-50">
+        <button onclick="newConversation()" id="btn-new-conv-top" class="w-full flex items-center justify-center gap-1.5 text-xs text-white bg-brand hover:bg-blue-700 rounded-lg px-2.5 py-1.5 transition-colors font-medium" title="开始一段新对话">
+          <span class="text-sm">💬</span>
+          新对话
+        </button>
+      </div>
       <!-- v0.2.29.1 hotfix: workspace header (current path + 切换按钮) -->
       <div class="px-2 py-1.5 border-b border-border bg-slate-50">
         <div class="flex items-center justify-between gap-1">
@@ -344,14 +392,11 @@
       <div class="flex-1 overflow-y-auto py-2 flex flex-col" id="fileTree">
         <div id="treeLoading" class="px-4 py-2 text-xs text-faint">加载中...</div>
       </div>
-      <!-- Left bottom toolbar: [+] 新对话 -->
-      <div class="border-t border-border p-2 flex items-center gap-2">
-        <button onclick="newFile()" id="btn-new-file" class="w-8 h-8 flex items-center justify-center rounded-lg text-muted hover:bg-slate-100 hover:text-ink transition-colors" title="新建文件">
-          <span class="text-lg leading-none">+</span>
-        </button>
-        <button onclick="newConversation()" id="btn-new-conv" class="flex items-center gap-1.5 text-xs text-muted hover:text-brand hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors">
-          <span class="text-sm">💬</span>
-          新对话
+      <!-- v0.2.30.1 hotfix: 底部只保留 [+ 新建文件]，新对话已上移 -->
+      <div class="border-t border-border p-2 flex items-center">
+        <button onclick="newFile()" id="btn-new-file" class="w-full flex items-center justify-center gap-1.5 text-xs text-muted hover:text-ink hover:bg-slate-50 rounded-lg px-2.5 py-1.5 transition-colors" title="新建文件">
+          <span class="text-sm leading-none">+</span>
+          新建文件
         </button>
       </div>
     </aside>
@@ -418,9 +463,22 @@
 
     // ── Runtime Services ────────────────────────────────────────
     // Import environment service functions from runtime module
+    // v0.2.30.1 hotfix: parseWindVersion 宽松版。
+    // 旧 regex 严格要求 "wind X.Y.Z" 前缀；实际 `wind --version` 在不同终端会输出
+    // "wind 0.1.0", "wind-cli 0.1.0", "0.1.0", "v0.1.0" 等多种格式。
+    // 先尝试带前缀的；不匹配再退化到任意 X.Y.Z（仅在 raw 较短时使用，避免误抓 JSON）。
     const parseWindVersion = window.parseWindVersion || ((raw = '') => {
-      const match = raw.match(/(?:wind|windcli)\s+v?(\d+\.\d+\.\d+)/i);
-      return match ? match[1] : null;
+      if (!raw || typeof raw !== 'string') return null;
+      // 取第一行（多行输出时）
+      const firstLine = raw.split(/\r?\n/)[0];
+      const labeled = firstLine.match(/(?:wind|windcli|wind-cli)\s*v?(\d+\.\d+\.\d+)/i);
+      if (labeled) return labeled[1];
+      // 退化：raw 长度合理时取第一个 semver
+      if (firstLine.length <= 64) {
+        const loose = firstLine.match(/v?(\d+\.\d+\.\d+)/);
+        if (loose) return loose[1];
+      }
+      return null;
     });
     const normalizeEnvironmentStatus = window.normalizeEnvironmentStatus || ((input) => {
       const current = parseWindVersion(input?.windcli?.version ?? '');
@@ -584,7 +642,7 @@
 
         // Workspace folder header
         const wsFolder = document.createElement('div');
-        wsFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+        wsFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 text-sm text-ink font-medium';
         wsFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📁</span><span>workspace/</span>`;
         wsSection.appendChild(wsFolder);
 
@@ -612,14 +670,67 @@
             return a.name.localeCompare(b.name);
           });
           if (others.length > 0) {
+            // v0.2.30.1 hotfix: 文件夹可展开。点击 ▶ 切换到 ▼ 并插入子项。
+            // 用一个子容器作为折叠区，data 记录 subpath。
+            const childContainer = document.createElement('div');
+            childContainer.className = 'hidden pl-4 border-l border-border ml-4';
+            const childHeader = document.createElement('div');
+            childHeader.className = 'px-3 py-1 text-[10px] text-faint';
+            childHeader.textContent = '（点击文件夹展开）';
+            childContainer.appendChild(childHeader);
+            wsSection.appendChild(childContainer);
+            const loadFolder = async (entry, parentDiv) => {
+              if (parentDiv.dataset.expanded === 'true') {
+                childContainer.classList.add('hidden');
+                parentDiv.dataset.expanded = 'false';
+                const arrow = parentDiv.querySelector('.folder-arrow');
+                if (arrow) arrow.textContent = '▶';
+                return;
+              }
+              const arrow = parentDiv.querySelector('.folder-arrow');
+              if (arrow) arrow.textContent = '▼';
+              parentDiv.dataset.expanded = 'true';
+              childContainer.classList.remove('hidden');
+              childContainer.innerHTML = '<div class="px-3 py-1 text-[10px] text-faint">加载中…</div>';
+              try {
+                const sub = await invoke('list_workspace', { subpath: entry.name });
+                childContainer.innerHTML = '';
+                if (sub && sub.ok && sub.data && sub.data.entries && sub.data.entries.length > 0) {
+                  sub.data.entries.forEach(child => {
+                    const cdiv = document.createElement('div');
+                    cdiv.className = 'tree-item flex items-center gap-2 px-3 py-1 text-xs text-slate-500 hover:bg-slate-50';
+                    cdiv.innerHTML = `
+                      <span class="w-4 h-4 flex items-center justify-center">${child.is_dir ? '📁' : '📄'}</span>
+                      <span class="truncate flex-1">${escHtml(child.name)}</span>
+                    `;
+                    if (!child.is_dir) cdiv.onclick = () => showFileContent(entry.name + '/' + child.name);
+                    cdiv.style.cursor = 'pointer';
+                    childContainer.appendChild(cdiv);
+                  });
+                } else {
+                  childContainer.innerHTML = '<div class="px-3 py-1 text-[10px] text-faint">（空目录）</div>';
+                }
+              } catch (e) {
+                childContainer.innerHTML = `<div class="px-3 py-1 text-[10px] text-red-600">展开失败：${escHtml(String(e))}</div>`;
+              }
+            };
             others.forEach(entry => {
               const div = document.createElement('div');
               div.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-slate-500 hover:bg-slate-50';
-              div.innerHTML = `
-                <span class="w-4 h-4 flex items-center justify-center text-xs">${entry.is_dir ? '📁' : '📄'}</span>
-                <span class="truncate flex-1">${escHtml(entry.name)}</span>
-              `;
-              if (!entry.is_dir) {
+              div.dataset.expanded = 'false';
+              if (entry.is_dir) {
+                div.innerHTML = `
+                  <span class="folder-arrow w-3 h-3 flex items-center justify-center text-[10px] text-faint">▶</span>
+                  <span class="w-4 h-4 flex items-center justify-center text-xs">📁</span>
+                  <span class="truncate flex-1">${escHtml(entry.name)}</span>
+                `;
+                div.onclick = () => loadFolder(entry, div);
+              } else {
+                div.innerHTML = `
+                  <span class="w-3 h-3"></span>
+                  <span class="w-4 h-4 flex items-center justify-center text-xs">📄</span>
+                  <span class="truncate flex-1">${escHtml(entry.name)}</span>
+                `;
                 div.onclick = () => showFileContent(entry.name);
               }
               wsSection.appendChild(div);
@@ -655,7 +766,7 @@
 
         // Wiki folder header
         const wikiFolder = document.createElement('div');
-        wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 cursor-pointer text-sm text-ink font-medium';
+        wikiFolder.className = 'tree-item flex items-center gap-2 px-4 py-1.5 text-sm text-ink font-medium';
         wikiFolder.innerHTML = `<span class="w-4 h-4 flex items-center justify-center">📖</span><span>wiki/</span>`;
         wikiSection.appendChild(wikiFolder);
 
@@ -668,12 +779,20 @@
               <span class="w-4 h-4 flex items-center justify-center text-xs">${entry.is_dir ? '📁' : '📄'}</span>
               <span class="truncate flex-1">${escHtml(entry.name)}</span>
             `;
+            if (entry.is_dir) {
+              // wiki 子目录暂不展开；提示用户 wiki 完整链路在 v0.3.0
+              div.title = 'v0.2.30.1 仅支持列出，不展开子目录；wiki 完整闭环进入 v0.3.0';
+            } else {
+              div.onclick = () => showFileContent(entry.name);
+            }
             wikiSection.appendChild(div);
           });
         } else {
+          // v0.2.30.1 hotfix: 之前只显示 "(空)"，@yan 反馈信息量太少。
+          // 现在给出 v0.3.0 路线说明 + wind-cli 兜底使用提示。
           const empty = document.createElement('div');
-          empty.className = 'px-4 py-1 text-xs text-faint';
-          empty.textContent = '(空)';
+          empty.className = 'px-4 py-1.5 text-xs text-faint leading-relaxed';
+          empty.innerHTML = `wiki 目录为空<br><span class="text-[10px]">v0.3.0 提供完整知识库闭环；本版本先用 <code class="font-mono">wind wiki ingest</code> 入库</span>`;
           wikiSection.appendChild(empty);
         }
 
@@ -731,27 +850,59 @@
     }
 
     async function showFileContent(filename) {
-      const result = await invoke('read_file', { path: filename });
-      if (result.ok && result.data && result.data.content) {
-        const file = document.getElementById('detail-file');
-        if (file) {
-          // Spec §3.1 L2.2: .md / .markdown files render via marked, not <pre>.
-          // Other extensions keep the readable monospace text view.
-          const isMarkdown = /\.(md|markdown)$/i.test(filename);
-          if (isMarkdown && typeof marked !== 'undefined' && marked.parse) {
-            try {
-              const html = marked.parse(result.data.content);
-              file.innerHTML = `<div class="markdown-body bg-white border border-border rounded-xl p-5 text-sm leading-relaxed text-slate-800">${html}</div>`;
-            } catch (e) {
-              // Fallback to safe text rendering if marked throws
+      const file = document.getElementById('detail-file');
+      const rightPanel = document.getElementById('rightPanel');
+      try {
+        const result = await invoke('read_file', { path: filename });
+        if (result && result.ok && result.data && result.data.content) {
+          if (file) {
+            // Spec §3.1 L2.2: .md / .markdown files render via marked, not <pre>.
+            // Other extensions keep the readable monospace text view.
+            const isMarkdown = /\.(md|markdown)$/i.test(filename);
+            if (isMarkdown && typeof marked !== 'undefined' && marked.parse) {
+              try {
+                const html = marked.parse(result.data.content);
+                file.innerHTML = `<div class="markdown-body bg-white border border-border rounded-xl p-5 text-sm leading-relaxed text-slate-800">${html}</div>`;
+              } catch (e) {
+                // Fallback to safe text rendering if marked throws
+                file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
+                window._log && window._log('marked.parse failed for', filename, e);
+              }
+            } else {
               file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
-              window._log && window._log('marked.parse failed for', filename, e);
             }
-          } else {
-            file.innerHTML = `<div class="bg-slate-50 border border-border rounded-xl p-4 font-mono text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">${escHtml(result.data.content)}</div>`;
           }
+          switchTab('file', document.getElementById('tab-file'));
+          if (rightPanel) rightPanel.classList.add('open');
+        } else {
+          // v0.2.30.1 hotfix: 之前静默吞错；现在显式渲染错误卡。
+          const stderr = (result && (result.stderr || result.error)) || '未知错误';
+          if (file) {
+            file.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm">
+              <div class="flex items-center gap-1.5 text-red-700 font-medium mb-1">
+                <span>⚠️</span><span>无法读取文件</span>
+              </div>
+              <div class="text-xs text-red-600 font-mono break-all">${escHtml(filename)}</div>
+              <div class="mt-1 text-xs text-red-600">${escHtml(stderr)}</div>
+            </div>`;
+          }
+          switchTab('file', document.getElementById('tab-file'));
+          if (rightPanel) rightPanel.classList.add('open');
+          window._log && window._log('showFileContent: read failed for', filename, stderr);
+        }
+      } catch (e) {
+        if (file) {
+          file.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm">
+            <div class="flex items-center gap-1.5 text-red-700 font-medium mb-1">
+              <span>⚠️</span><span>读取文件异常</span>
+            </div>
+            <div class="text-xs text-red-600 font-mono break-all">${escHtml(filename)}</div>
+            <div class="mt-1 text-xs text-red-600">${escHtml(String(e))}</div>
+          </div>`;
         }
         switchTab('file', document.getElementById('tab-file'));
+        if (rightPanel) rightPanel.classList.add('open');
+        window._log && window._log('showFileContent: exception for', filename, e);
       }
     }
 
@@ -1091,6 +1242,36 @@
       if (modal) modal.classList.add('hidden');
     }
 
+    // ── Winwork About entry (v0.2.30.1 hotfix) ────────────────
+    // Pill click -> open About modal. Mirrors envState + workspace path.
+    // v0.2.30.1 在此处落"顶栏 winwork 入口"补回；之前忘加 onclick。
+    async function showAboutModal() {
+      const modal = document.getElementById('aboutModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      const winworkVer = envState.winworkVersion || 'unknown';
+      const windcliVer = envState.windcliVersion || 'unknown';
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('aboutVersion', 'v' + winworkVer);
+      set('aboutWinworkVer', 'v' + winworkVer);
+      set('aboutWindcliVer', windcliVer);
+      // 工作区路径：复用现有缓存；如无则拉一次
+      let ws = _lastDisplayedWorkspacePath;
+      if (!ws) {
+        try { ws = await invoke('get_workspace_path', {}, 5000); } catch(e) { ws = ''; }
+      }
+      const wsEl = document.getElementById('aboutWorkspace');
+      if (wsEl) {
+        wsEl.textContent = ws || '未设置';
+        wsEl.title = ws || '';
+      }
+    }
+
+    function hideAboutModal() {
+      const modal = document.getElementById('aboutModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
     async function runCheckUpgrade() {
       if (_upgradeInFlight) return;
       _upgradeInFlight = true;
@@ -1107,11 +1288,14 @@
           return;
         }
         // result.data is the JSON from crate::wind::check_upgrade()
-        // Expected fields: { current, latest, available, ... }
+        // Backend field names: current_version / latest_version / has_update / found.
+        // v0.2.30.1 hotfix: 之前误读 data.current / data.latest，导致 modal 显示 "—"。
         const data = (typeof result.data === 'object' && result.data) ? result.data : {};
-        const current = data.current || envState.windcliVersion || 'unknown';
-        const latestVer = data.latest || data.output || current;
-        const available = data.available === true || (latestVer && current && latestVer !== current);
+        const current = data.current_version || data.current || envState.windcliVersion || 'unknown';
+        const latestVer = data.latest_version || data.latest || current;
+        const available = data.has_update === 'true' || data.has_update === true
+          || data.available === true
+          || (latestVer && current && latestVer !== current);
         if (latest) latest.textContent = latestVer || '—';
         if (status) {
           status.textContent = available
@@ -1158,9 +1342,11 @@
         const result = await invoke('check_upgrade', {}, 15000);
         if (!result || !result.ok) return;
         const data = (typeof result.data === 'object' && result.data) ? result.data : {};
-        const current = data.current || envState.windcliVersion || 'unknown';
-        const latestVer = data.latest || data.output || current;
-        const available = data.available === true || (latestVer && current && latestVer !== current);
+        const current = data.current_version || data.current || envState.windcliVersion || 'unknown';
+        const latestVer = data.latest_version || data.latest || current;
+        const available = data.has_update === 'true' || data.has_update === true
+          || data.available === true
+          || (latestVer && current && latestVer !== current);
         const badge = document.getElementById('topWindcliBadge');
         if (badge) badge.classList.toggle('hidden', !available);
         _upgradeCheckResult = { current, latest: latestVer, available };
@@ -1401,10 +1587,10 @@
     }
 
     // ── Command router ───────────────────────────────────────
-    // v0.2.29.1 hotfix: "answer" route for read-only keywords — no wind-cli call.
-    // Spec §3.1 L2.5: 简单 Q&A 不调 CLI. If the user only asked a read-only
-    // question and has no apiKey, render a polite "please configure API" card
-    // instead of routing to wind ls.
+    // v0.2.30.1 hotfix: 默认分支从 'ls' 改为 'answer'。
+    // 旧 fallback 任何不命中的问题都错误撞 CLI；@yan 报告"任何问题都调 wind-cli"。
+    // 现在未命中明确写/工具意图时一律按"直接回答"走，不再默认触发 wind ls。
+    // Spec §3.1 L2.5: 简单 Q&A 不调 CLI. "temporary heuristic" 保留 spec 备注。
     const ROUTE_READ_ONLY = /(列举|列出|读取|读|搜索|查找|查看|看|翻译|解释|说明|什么是|是什么|介绍|简介|总结|概括|对比|区别|怎么用|如何|list|ls|read|search|find|show|view|translate|explain|what is|how to|summary|summarize|compare)/i;
     function routeCommand(text) {
       const t = text.toLowerCase();
@@ -1421,7 +1607,8 @@
       if (t.includes('知识库查询') || t.includes('wiki query') || t.includes('查知识')) return 'wiki_query';
       if (t.includes('知识库入库') || t.includes('wiki ingest') || t.includes('文档入库')) return 'wiki_ingest';
       if (t.includes('wiki lint') || t.includes('健康检查') || t.includes('wiki status')) return 'wiki_status';
-      return 'ls'; // default
+      // v0.2.30.1 hotfix: 默认走 'answer'，不再误撞 wind ls。
+      return 'answer';
     }
 
     function buildArgs(key, text) {

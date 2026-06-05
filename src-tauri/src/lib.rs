@@ -301,9 +301,20 @@ fn trigger_install() -> WindResult {
 /// the workspace section of the left file tree (index.html:497). Thin
 /// wrapper over `list_files(None)` so callers don't have to know the
 /// workspace root path.
+///
+/// v0.2.30.1 hotfix: optional `subpath` parameter to support folder
+/// expand in the left file tree. When None/empty, lists the root.
 #[tauri::command]
-fn list_workspace() -> WindResult {
-    crate::wind::list_files(None)
+fn list_workspace(subpath: Option<String>) -> WindResult {
+    match subpath.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(rel) => {
+            // Resolve relative subpath against workspace root.
+            let root = crate::wind::get_workspace_path();
+            let joined = std::path::Path::new(&root).join(rel);
+            crate::wind::list_files(Some(joined.to_string_lossy().to_string()))
+        }
+        None => crate::wind::list_files(None),
+    }
 }
 
 /// L2: list files in the configured wiki directory. Frontend wires
